@@ -65,7 +65,7 @@ export default function StaffDashboard() {
         <div className="flex flex-col space-y-2">
           <h1 className="text-3xl font-bold">Staff Dashboard</h1>
           {userData && (
-            <p className="text-gray-500">
+            <div className="text-gray-500">
               Welcome, {userData.fullName || `${userData.firstName} ${userData.lastName}`} 
               {userData.staffId && ` (Staff ID: ${userData.staffId})`}
               {userData.role && (
@@ -73,7 +73,7 @@ export default function StaffDashboard() {
                   {userData.role.charAt(0).toUpperCase() + userData.role.slice(1)}
                 </Badge>
               )}
-            </p>
+            </div>
           )}
         </div>
         

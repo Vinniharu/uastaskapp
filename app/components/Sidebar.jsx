@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 const routes = [
   {
@@ -75,7 +76,8 @@ export function Sidebar({ mobile, onClose }) {
           className="flex items-center pl-3 mb-14"
           onClick={mobile ? onClose : undefined}
         >
-          <h1 className="text-2xl font-bold">TaskApp</h1>
+          <Image src={"/mainlogo.jpg"} alt="Office Logo" width={80} height={80}/>
+          {/* <h1 className="text-2xl font-bold">TaskApp</h1> */}
         </Link>
         <div className="space-y-1">
           {routes

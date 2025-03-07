@@ -1,4 +1,14 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Task Management Application
+
+A modern task management application built with Next.js, designed to help teams organize and track their tasks efficiently.
+
+## Features
+
+- User Authentication (Staff/Admin login)
+- Task Creation and Management
+- Task Status Tracking
+- User-friendly Interface
+- Responsive Design
 
 ## Getting Started
 
@@ -14,23 +24,45 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) with your browser to access the application.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `/app` - Main application pages and routes
+- `/components` - Reusable React components
+- `/lib` - Utility functions and API handlers
+- `/public` - Static assets
 
-## Learn More
+## Technology Stack
 
-To learn more about Next.js, take a look at the following resources:
+- [Next.js](https://nextjs.org) - React framework for production
+- Tailwind CSS - For styling
+- Next Auth - Authentication
+- [Other technologies used in your project]
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Environment Setup
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Create a `.env.local` file in the root directory with the following variables:
 
-## Deploy on Vercel
+```env
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
+# Add other necessary environment variables
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+This environment variable should be used in all API calls throughout your application. For production, you would set this to your production API URL.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Remember:
+- The `NEXT_PUBLIC_` prefix makes the variable available in the browser
+- For development, it typically points to `http://localhost:3000`
+- For production, it would point to your production API URL
+- Make sure to add `.env.local` to your `.gitignore` file if it's not already there
+
+Would you like me to help you implement this in any other specific files in your project?
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request

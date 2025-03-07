@@ -72,13 +72,8 @@ export default function TaskHistoryPage() {
     try {
       console.log("Fetching completed tasks with token:", token ? "Token exists" : "No token");
       
-      // Use the full URL from the API example
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://00df-105-114-3-98.ngrok-free.app';
-      
-      // Use retry with backoff for network resilience
       const response = await retryWithBackoff(async () => {
-        // Explicitly filter for completed tasks only
-        const res = await fetch(`${apiUrl}/api/tasks?status=completed`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/tasks?status=completed`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -88,10 +83,8 @@ export default function TaskHistoryPage() {
         return handleApiResponse(res);
       });
       
-      console.log("API response status:", response.status);
       
       const data = await response.json();
-      console.log("Completed tasks data received:", data);
       
       // Ensure data is an array and filter to only include completed tasks
       const tasksArray = Array.isArray(data) ? data : [data];

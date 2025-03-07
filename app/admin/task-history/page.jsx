@@ -368,7 +368,7 @@ export default function TaskHistory() {
                         </td>
                         <td className="py-3 px-4">
                           {task.assignedTo ? 
-                            `${task.assignedTo.firstName} ${task.assignedTo.lastName} (ID: ${task.assignedTo.id})` : 
+                            `${task.assignedTo.firstName} ${task.assignedTo.lastName}` : 
                             'Unassigned'}
                         </td>
                         <td className="py-3 px-4">
@@ -433,7 +433,7 @@ export default function TaskHistory() {
                       <h4 className="text-sm font-medium text-gray-500">Assigned To</h4>
                       <p className="text-sm">
                         {viewingTask.assignedTo ? 
-                          `${viewingTask.assignedTo.firstName} ${viewingTask.assignedTo.lastName} (ID: ${viewingTask.assignedTo.id})` : 
+                          `${viewingTask.assignedTo.firstName} ${viewingTask.assignedTo.lastName} ` : 
                           'Unassigned'}
                       </p>
                     </div>

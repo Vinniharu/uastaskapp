@@ -84,7 +84,9 @@ export default function TasksPage() {
       console.log("Fetching tasks with token:", token ? "Token exists" : "No token");
       
       // Use the full URL from the API example
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://00df-105-114-3-98.ngrok-free.app';
+      console.log(process.env.NEXT_PUBLIC_API_BASE_URL);
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
       
       // Use retry with backoff for network resilience
       const response = await retryWithBackoff(async () => {
@@ -97,11 +99,9 @@ export default function TasksPage() {
         
         return handleApiResponse(res);
       });
-      
-      console.log("API response status:", response.status);
+    
       
       const data = await response.json();
-      console.log("Tasks data received:", data);
       
       // Ensure data is an array
       const tasksArray = Array.isArray(data) ? data : [data];

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 
 const adminRoutes = [
   {
@@ -71,7 +72,8 @@ export function AdminSidebar({ mobile, onClose }) {
           onClick={mobile ? onClose : undefined}
         >
           <div className="flex flex-col">
-            <h1 className="text-2xl font-bold">TaskApp</h1>
+          <Image src={"/mainlogo.jpg"} alt="Office Logo" width={80} height={80}/>
+            {/* <h1 className="text-2xl font-bold">TaskApp</h1> */}
             <span className="text-xs text-gray-400">Admin Dashboard</span>
           </div>
         </Link>
