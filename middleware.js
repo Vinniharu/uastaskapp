@@ -11,11 +11,11 @@ const staffOnlyRoutes = [
 
 // Define routes that require admin role
 const adminRoutes = [
-  '/admin/dashboard',
-  '/admin/staff',
-  '/admin/create-task',
-  '/admin/current-tasks',
-  '/admin/task-history',
+  // '/admin/dashboard',
+  // '/admin/staff',
+  // '/admin/create-task',
+  // '/admin/current-tasks',
+  // '/admin/task-history',
 ];
 
 // Define routes that should not be accessible when logged in

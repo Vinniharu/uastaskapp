@@ -40,12 +40,12 @@ const adminRoutes = [
     href: "/admin/task-history",
     color: "text-amber-500",
   },
-  // {
-  //   label: "Staff Management",
-  //   icon: Users,
-  //   href: "/admin/staff",
-  //   color: "text-blue-500",
-  // },
+  {
+    label: "Staff Management",
+    icon: Users,
+    href: "/admin/staff",
+    color: "text-blue-500",
+  },
 ];
 
 export function AdminSidebar({ mobile, onClose }) {
