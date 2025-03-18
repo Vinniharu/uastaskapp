@@ -62,16 +62,13 @@ const formatDate = (dateString) => {
 
 // Sample departments
 const DEPARTMENTS = [
-  "Engineering",
-  "Marketing",
-  "Human Resources",
-  "Finance",
-  "Operations",
-  "Customer Support",
-  "Sales",
-  "Research & Development",
-  "Legal",
-  "Product Management"
+  "Electronic Unit",
+  "Moulding Unit",
+  "GIS",
+  "Payload",
+  "3D & CNC",
+  "Health & Safety",
+  "Pilots"
 ];
 
 // Dummy data generator
