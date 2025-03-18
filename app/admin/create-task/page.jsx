@@ -27,7 +27,7 @@ import {
   Loader2
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { createTask, getAllUsers } from "@/lib/api";
+import { createTask, getAllStaff } from "@/lib/api";
 
 const priorityLevels = [
   { value: "low", label: "Low", color: "text-green-500" },
@@ -55,7 +55,7 @@ export default function CreateTask() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const usersData = await getAllUsers();
+        const usersData = await getAllStaff();
         setUsers(usersData);
       } catch (err) {
         console.error("Error fetching users:", err);

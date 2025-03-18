@@ -44,6 +44,7 @@ import { NetworkStatus } from "@/app/components/NetworkStatus";
 import { DismissibleAlert } from "@/app/components/DismissibleAlert";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { formatDateTime } from "@/lib/utils";
+import { getTaskById } from "@/lib/api";
 
 export default function TaskDetailPage(props) {
   // Unwrap params using React.use()
@@ -76,33 +77,18 @@ export default function TaskDetailPage(props) {
   const fetchTask = async () => {
     setIsLoading(true);
     try {
-      console.log("Fetching task with ID:", taskId, "and token:", token ? "Token exists" : "No token");
+      console.log("Fetching task with ID:", taskId);
       
-      // Use the full URL from the API example
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://00df-105-114-3-98.ngrok-free.app';
-      
-      // Use retry with backoff for network resilience
-      const response = await retryWithBackoff(async () => {
-        const res = await fetch(`${apiUrl}/api/tasks/${taskId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        // Handle 404 specially to trigger the not-found page
-        if (res.status === 404) {
+      try {
+        const taskData = await getTaskById(taskId);
+        console.log("Task data received:", taskData);
+        setTask(taskData);
+      } catch (err) {
+        if (err.status === 404) {
           notFound();
         }
-        
-        return handleApiResponse(res);
-      });
-      
-      console.log("API response status:", response.status);
-      
-      const data = await response.json();
-      console.log("Task data received:", data);
-      setTask(data);
+        throw err;
+      }
     } catch (err) {
       console.error("Error fetching task:", err);
       setError(getErrorMessage(err, "loading task details"));

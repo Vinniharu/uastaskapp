@@ -32,6 +32,7 @@ import { getErrorMessage, handleApiResponse, retryWithBackoff } from "@/lib/erro
 import { NetworkStatus } from "@/app/components/NetworkStatus";
 import { DismissibleAlert } from "@/app/components/DismissibleAlert";
 import { CompletedTaskView } from "@/app/components/CompletedTaskView";
+import { getAllTasks } from "@/lib/api";
 
 export default function TaskHistoryPage() {
   const { token } = useAuth();
@@ -72,23 +73,10 @@ export default function TaskHistoryPage() {
     try {
       console.log("Fetching completed tasks with token:", token ? "Token exists" : "No token");
       
-      const response = await retryWithBackoff(async () => {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/tasks?status=completed`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        return handleApiResponse(res);
-      });
+      const tasks = await getAllTasks();
       
-      
-      const data = await response.json();
-      
-      // Ensure data is an array and filter to only include completed tasks
-      const tasksArray = Array.isArray(data) ? data : [data];
-      const completedTasksOnly = tasksArray.filter(task => task.status === "completed");
+      // Filter to only include completed tasks
+      const completedTasksOnly = tasks.filter(task => task.status === "completed");
       setCompletedTasks(completedTasksOnly);
       setError("");
     } catch (err) {

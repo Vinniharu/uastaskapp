@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuthCheck } from "@/lib/auth-utils";
+import { useAuth } from "@/lib/auth";
 import { LoadingScreen } from "./loading-screen";
 
 /**
@@ -11,8 +14,19 @@ import { LoadingScreen } from "./loading-screen";
  * @returns {React.ReactNode} - Protected content or null
  */
 export function ProtectedRoute({ children, redirectTo = "/staff/login" }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { isStaffLoggedIn } = useAuth();
+  
   // Check if user is authenticated, redirect to login if not
   const isAuthenticated = useAuthCheck(redirectTo);
+  
+  useEffect(() => {
+    // If we're certain the user is not logged in, redirect to login
+    if (isStaffLoggedIn === false) {
+      router.push(`${redirectTo}?redirect=${pathname}`);
+    }
+  }, [isStaffLoggedIn, router, redirectTo, pathname]);
   
   // Show loading screen while checking authentication
   if (typeof isAuthenticated === 'undefined') {

@@ -43,6 +43,7 @@ import { statusOptions, priorityBadges } from "@/lib/mock-data";
 import { getErrorMessage, handleApiResponse, retryWithBackoff } from "@/lib/error-utils";
 import { NetworkStatus } from "@/app/components/NetworkStatus";
 import { DismissibleAlert } from "@/app/components/DismissibleAlert";
+import { getAllTasks } from "@/lib/api";
 
 export default function TasksPage() {
   const { staffInfo, token } = useAuth();
@@ -83,28 +84,10 @@ export default function TasksPage() {
     try {
       console.log("Fetching tasks with token:", token ? "Token exists" : "No token");
       
-      // Use the full URL from the API example
-      console.log(process.env.NEXT_PUBLIC_API_BASE_URL);
-      
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-      
-      // Use retry with backoff for network resilience
-      const response = await retryWithBackoff(async () => {
-        const res = await fetch(`${apiUrl}/api/tasks`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        return handleApiResponse(res);
-      });
-    
-      
-      const data = await response.json();
+      const tasksData = await getAllTasks();
       
       // Ensure data is an array
-      const tasksArray = Array.isArray(data) ? data : [data];
+      const tasksArray = Array.isArray(tasksData) ? tasksData : [tasksData];
       setTasks(tasksArray);
       setError("");
     } catch (err) {

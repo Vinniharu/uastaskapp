@@ -35,7 +35,7 @@ import {
   X
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { getAllTasks, getAllUsers, updateTask } from "@/lib/api";
+import { getAllTasks, getAllStaff, updateTask } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -104,7 +104,7 @@ export default function CurrentTasks() {
         setFilteredTasks(tasksData);
         
         // Fetch all users for assignee filter
-        const usersData = await getAllUsers();
+        const usersData = await getAllStaff();
         setUsers(usersData);
       } catch (err) {
         console.error("Error fetching tasks:", err);

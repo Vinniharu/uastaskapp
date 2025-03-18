@@ -1,24 +1,30 @@
 "use client";
 
-import { DashboardLayout } from "./components/DashboardLayout";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { useAuth } from "@/lib/auth";
 
 export default function Home() {
   const router = useRouter();
+  const { isStaffLoggedIn, staffInfo } = useAuth();
 
   useEffect(() => {
-    router.push("/staff/login");
-  }, [router]);
+    if (isStaffLoggedIn && staffInfo) {
+      // If user is logged in, redirect to their dashboard based on role
+      if (staffInfo.role === 'admin') {
+        router.push("/admin/dashboard");
+      } else {
+        router.push("/staff/dashboard");
+      }
+    } else {
+      // If not logged in, redirect to login page
+      router.push("/staff/login");
+    }
+  }, [router, isStaffLoggedIn, staffInfo]);
 
   return (
-    <DashboardLayout>
-      <div className="flex flex-col gap-4">
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        <p className="text-muted-foreground">
-          Welcome to your task management dashboard
-        </p>
-      </div>
-    </DashboardLayout>
+    <div className="flex flex-col items-center justify-center h-screen">
+      <img src="/mainlogo.jpg" alt="logo" width={100} height={100} className="animate-pulse"/>
+    </div>
   );
 }

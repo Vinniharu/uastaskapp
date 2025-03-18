@@ -1,6 +1,22 @@
 import { NextResponse } from 'next/server';
 import { jwtDecode } from 'jwt-decode';
 
+// Define routes that should always be accessible whether logged in or not
+const publicRoutes = [
+  '/',
+  '/api',
+  '/_next',
+  '/favicon.ico',
+  '/images',
+  '/assets',
+];
+
+// Authentication-related API endpoints that should be accessible without auth
+const authApiEndpoints = [
+  '/auth/register',
+  '/auth/login',
+];
+
 // Define staff routes that should redirect admins to admin dashboard
 const staffOnlyRoutes = [
   '/staff/dashboard',
@@ -11,11 +27,12 @@ const staffOnlyRoutes = [
 
 // Define routes that require admin role
 const adminRoutes = [
-  // '/admin/dashboard',
-  // '/admin/staff',
-  // '/admin/create-task',
-  // '/admin/current-tasks',
-  // '/admin/task-history',
+  '/admin/dashboard',
+  '/admin/staff',
+  '/admin/create-task',
+  '/admin/current-tasks',
+  '/admin/task-history',
+  // '/admin/report-logs',
 ];
 
 // Define routes that should not be accessible when logged in
@@ -29,7 +46,16 @@ export function middleware(request) {
   // Get the pathname from the URL
   const { pathname } = request.nextUrl;
   
-  // Check if there's an auth token in the session
+  // Skip middleware for public static routes and auth API endpoints
+  if (
+    publicRoutes.some(route => pathname.startsWith(route)) ||
+    authApiEndpoints.some(endpoint => pathname.includes(endpoint))
+  ) {
+    console.log("Middleware: Skipping for public or auth route:", pathname);
+    return NextResponse.next();
+  }
+  
+  // Check if there's an auth token in the cookies
   const authToken = request.cookies.get('authToken')?.value;
   const isLoggedIn = !!authToken;
   
@@ -41,6 +67,10 @@ export function middleware(request) {
       userRole = decoded.role || null;
     } catch (error) {
       console.error('Error decoding token:', error);
+      // If token is invalid, clear it and redirect to login
+      const response = NextResponse.redirect(new URL('/staff/login', request.url));
+      response.cookies.delete('authToken');
+      return response;
     }
   }
   
@@ -59,9 +89,10 @@ export function middleware(request) {
     pathname === route || pathname.startsWith(`${route}/`)
   );
   
-  // If the user is not logged in and trying to access protected routes, redirect to login
-  if ((isStaffRoute || isAdminRoute) && !isLoggedIn) {
+  // If user is not logged in and trying to access any protected route, redirect to login
+  if (!isLoggedIn && !isAuthRoute && !pathname.startsWith('/api')) {
     const redirectUrl = new URL('/staff/login', request.url);
+    redirectUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(redirectUrl);
   }
   

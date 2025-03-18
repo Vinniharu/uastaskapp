@@ -9,7 +9,8 @@ import {
   ClipboardList,
   History,
   Users,
-  LogOut
+  LogOut,
+  FileText
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,12 @@ const adminRoutes = [
     icon: Users,
     href: "/admin/staff",
     color: "text-blue-500",
+  },
+  {
+    label: "Report Logs",
+    icon: FileText,
+    href: "/admin/report-logs",
+    color: "text-red-500",
   },
 ];
 
