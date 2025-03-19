@@ -26,17 +26,50 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Search, MoreHorizontal, UserPlus, Filter, Camera, Upload, X, Trash2, Pencil, Eye, Key, RefreshCw } from "lucide-react";
-import { getAllStaff, createStaff, getStaffById, uploadStaffProfilePicture, changeStaffPassword, resetStaffPassword, updateStaff } from "@/lib/api";
-import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
-import 'react-image-crop/dist/ReactCrop.css';
+import {
+  AlertCircle,
+  Search,
+  MoreHorizontal,
+  UserPlus,
+  Filter,
+  Camera,
+  Upload,
+  X,
+  Trash2,
+  Eye,
+  Key,
+  RefreshCw,
+} from "lucide-react";
+import {
+  getAllStaff,
+  createStaff,
+  getStaffById,
+  uploadStaffProfilePicture,
+  changeStaffPassword,
+  resetStaffPassword,
+  updateStaff,
+  deleteStaff,
+  fetchStaffProfileImage,
+  getStaffProfileImageUrl,
+} from "@/lib/api";
+import ReactCrop, { centerCrop, makeAspectCrop } from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function StaffManagement() {
   const [staffData, setStaffData] = useState([]);
@@ -55,11 +88,13 @@ export default function StaffManagement() {
     email: "",
     password: "password123", // Default password for admin-created accounts
     staffId: "",
+    phoneNumber: "",
+    department: "",
     isActive: true,
     isFired: false,
   });
   const [crop, setCrop] = useState(null);
-  const [imgSrc, setImgSrc] = useState('');
+  const [imgSrc, setImgSrc] = useState("");
   const [showCropDialog, setShowCropDialog] = useState(false);
   const imgRef = useRef(null);
   const canvasRef = useRef(null);
@@ -70,9 +105,27 @@ export default function StaffManagement() {
   const [successMessage, setSuccessMessage] = useState("");
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
-  const [selectedStaffForPassword, setSelectedStaffForPassword] = useState(null);
-  const [isProfilePictureDialogOpen, setIsProfilePictureDialogOpen] = useState(false);
+  const [selectedStaffForPassword, setSelectedStaffForPassword] =
+    useState(null);
+  const [isProfilePictureDialogOpen, setIsProfilePictureDialogOpen] =
+    useState(false);
   const [selectedStaffForPhoto, setSelectedStaffForPhoto] = useState(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [staffToDelete, setStaffToDelete] = useState(null);
+  const [selectedStaffImage, setSelectedStaffImage] = useState("");
+  const [staffImages, setStaffImages] = useState({});
+
+  // Add this after the useState declarations at the top
+  const departmentOptions = [
+    "Electronic Unit",
+    "Production Unit",
+    "Moulding Unit",
+    "GIS",
+    "Payload",
+    "3D & CNC",
+    "Health & Safety",
+    "Pilots",
+  ];;
 
   // Check if user is authenticated, redirect to login if not
   // For admin routes, redirect to admin login
@@ -100,6 +153,36 @@ export default function StaffManagement() {
     }
   };
 
+  // Fetch staff profile images when staff data changes
+  useEffect(() => {
+    if (staffData.length > 0) {
+      const loadStaffImages = async () => {
+        const imagePromises = staffData.map(async (staff) => {
+          if (staff.id) {
+            try {
+              const imageUrl = await fetchStaffProfileImage(staff.id);
+              return { id: staff.id, imageUrl };
+            } catch (err) {
+              console.error(`Error loading image for staff ${staff.id}:`, err);
+              return { id: staff.id, imageUrl: "" };
+            }
+          }
+          return { id: staff.id, imageUrl: "" };
+        });
+
+        const results = await Promise.all(imagePromises);
+        const imagesMap = results.reduce((acc, { id, imageUrl }) => {
+          acc[id] = imageUrl;
+          return acc;
+        }, {});
+
+        setStaffImages(imagesMap);
+      };
+
+      loadStaffImages();
+    }
+  }, [staffData]);
+
   // Filter staff based on search term and filters
   const filteredStaff = staffData.filter((staff) => {
     const matchesSearch =
@@ -113,46 +196,20 @@ export default function StaffManagement() {
       (statusFilter === "active" && staff.isActive) ||
       (statusFilter === "inactive" && !staff.isActive) ||
       (statusFilter === "fired" && staff.isFired);
+      
+    const matchesDepartment =
+      departmentFilter === "all" ||
+      staff.department === departmentFilter;
 
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesStatus && matchesDepartment;
   });
-
-  // Handle fired status change
-  const handleFiredStatusChange = async (staffId, isFired) => {
-    try {
-      // If firing, also set isActive to false
-      const statusUpdate = {
-        isFired,
-        isActive: isFired ? false : staffData.find(s => s.id === staffId).isActive,
-        terminationDate: isFired ? new Date().toISOString() : null,
-      };
-      
-      // Call API to update staff status
-      await getAllStaff(staffId, statusUpdate);
-      
-      // Update local state
-      setStaffData(
-        staffData.map((staff) =>
-          staff.id === staffId
-            ? {
-                ...staff,
-                ...statusUpdate,
-              }
-            : staff
-        )
-      );
-    } catch (err) {
-      console.error("Error updating staff fired status:", err);
-      setError("Failed to update staff status. Please try again.");
-    }
-  };
 
   // Handle photo selection
   const handlePhotoChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.addEventListener('load', () => {
+      reader.addEventListener("load", () => {
         setImgSrc(reader.result);
         setShowCropDialog(true);
       });
@@ -160,12 +217,12 @@ export default function StaffManagement() {
     }
   };
 
-  // Handle crop completion
+  // Handle image load and initialize crop
   const onImageLoad = (e) => {
     const { width, height } = e.currentTarget;
     const crop = makeAspectCrop(
       centerCrop({
-        unit: '%',
+        unit: "%",
         width: 90,
         height: 90,
       }),
@@ -186,12 +243,20 @@ export default function StaffManagement() {
     if (imgRef.current && crop && canvasRef.current) {
       const canvas = canvasRef.current;
       const image = imgRef.current;
+      
+      // Get the image dimensions
       const scaleX = image.naturalWidth / image.width;
       const scaleY = image.naturalHeight / image.height;
+      
+      // Set canvas dimensions to match crop size
       canvas.width = crop.width;
       canvas.height = crop.height;
-      const ctx = canvas.getContext('2d');
-
+      const ctx = canvas.getContext("2d");
+      
+      // Clear the canvas first
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw the cropped portion of the image onto the canvas
       ctx.drawImage(
         image,
         crop.x * scaleX,
@@ -205,13 +270,32 @@ export default function StaffManagement() {
       );
 
       // Convert canvas to blob
-      canvas.toBlob((blob) => {
-        if (blob) {
-          setSelectedPhoto(blob);
-          setPhotoPreview(canvas.toDataURL());
-          setShowCropDialog(false);
-        }
-      }, 'image/jpeg', 0.95);
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            console.log("Crop complete - created blob:", blob.size, "bytes");
+            
+            // Store the blob as the selected photo
+            setSelectedPhoto(blob);
+            
+            // Create a data URL for preview
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+            setPhotoPreview(dataUrl);
+            
+            // Close the crop dialog
+            setShowCropDialog(false);
+          } else {
+            console.error("Failed to create blob from canvas");
+            setError("Failed to process the cropped image. Please try again.");
+          }
+        },
+        "image/jpeg",
+        0.95
+      );
+    } else {
+      console.error("Crop failed - missing reference to image, canvas, or crop data");
+      setError("Failed to process the image. Please try again.");
+      setShowCropDialog(false);
     }
   };
 
@@ -229,7 +313,7 @@ export default function StaffManagement() {
     e.preventDefault();
     setIsLoading(true);
     setError("");
-    
+
     try {
       // First, create the staff member
       const response = await createStaff({
@@ -237,39 +321,73 @@ export default function StaffManagement() {
         firstName: newStaffData.firstName,
         lastName: newStaffData.lastName,
         staffId: newStaffData.staffId || generateStaffId(),
+        phoneNumber: newStaffData.phoneNumber,
+        department: newStaffData.department,
       });
 
-      // If photo is selected, upload it
-      if (selectedPhoto) {
-        try {
-          const formData = new FormData();
-          formData.append('file', selectedPhoto);
-          await uploadStaffProfilePicture(response.id, formData);
-        } catch (photoErr) {
-          console.error("Error uploading profile picture:", photoErr);
-          // Don't fail the whole operation if photo upload fails
+      // If a staff member was successfully created (we have an ID)
+      if (response && response.id) {
+        console.log(`Staff created with ID: ${response.id}`);
+        
+        // If photo is selected, upload it
+        if (selectedPhoto) {
+          try {
+            console.log("Preparing to upload profile picture");
+            
+            // Create a proper file from the blob with a name
+            const profileImageFile = new File([selectedPhoto], "profile-image.jpg", { 
+              type: "image/jpeg"
+            });
+            
+            // Create and populate form data
+            const formData = new FormData();
+            formData.append("file", profileImageFile);
+            
+            console.log("Uploading profile picture for staff ID:", response.id);
+            await uploadStaffProfilePicture(response.id, formData);
+            
+            // Fetch the new profile image and update staffImages
+            console.log("Profile picture uploaded, fetching image URL");
+            const newImageUrl = await fetchStaffProfileImage(response.id);
+            
+            // Update staffImages state with the new image URL
+            setStaffImages(prev => ({
+              ...prev,
+              [response.id]: newImageUrl
+            }));
+            
+            console.log("Profile image updated in state");
+          } catch (photoErr) {
+            console.error("Error uploading profile picture:", photoErr);
+            // Don't fail the whole operation if photo upload fails
+          }
         }
-      }
 
-      // Fetch the updated staff data to get the latest information including the profile picture
-      const updatedStaff = await getStaffById(response.id);
-      
-      // Add the new staff to the local state
-      setStaffData([...staffData, updatedStaff]);
-      
-      // Reset form and photo
-      setNewStaffData({
-        firstName: "",
-        lastName: "",
-        email: "",
-        staffId: "",
-        isActive: true,
-        isFired: false,
-      });
-      handleRemovePhoto();
-      
-      setIsAddStaffDialogOpen(false);
-      setSuccessMessage("Staff member added successfully");
+        // Fetch the updated staff data to get the latest information
+        console.log("Fetching updated staff data");
+        const updatedStaff = await getStaffById(response.id);
+
+        // Add the new staff to the local state
+        setStaffData(prevData => [...prevData, updatedStaff]);
+
+        // Reset form and photo
+        setNewStaffData({
+          firstName: "",
+          lastName: "",
+          email: "",
+          staffId: "",
+          phoneNumber: "",
+          department: "",
+          isActive: true,
+          isFired: false,
+        });
+        handleRemovePhoto();
+
+        setIsAddStaffDialogOpen(false);
+        setSuccessMessage("Staff member added successfully");
+      } else {
+        throw new Error("Staff creation failed - no ID returned");
+      }
     } catch (err) {
       console.error("Error adding staff:", err);
       setError(err.message || "Failed to add staff. Please try again.");
@@ -279,13 +397,18 @@ export default function StaffManagement() {
   };
 
   // Get unique departments for filter
-  const departments = ["all", ...new Set(staffData.map((staff) => staff.department))];
+  const departments = [
+    "all",
+    ...new Set(staffData.map((staff) => staff.department)),
+  ];
 
   // Helper function to generate a staff ID if none is provided
   const generateStaffId = () => {
     // Generate a random staff ID based on timestamp and random numbers
     const timestamp = Date.now().toString().slice(-6);
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const random = Math.floor(Math.random() * 1000)
+      .toString()
+      .padStart(3, "0");
     return `S${timestamp}${random}`;
   };
 
@@ -297,14 +420,16 @@ export default function StaffManagement() {
       setIsViewDialogOpen(true);
     } catch (err) {
       console.error("Error fetching staff details:", err);
-      setError(err.message || "Failed to fetch staff details. Please try again.");
+      setError(
+        err.message || "Failed to fetch staff details. Please try again."
+      );
     }
   };
 
   // Handle edit staff
   const handleEditStaff = (staff) => {
     setEditStaffData({
-      ...staff
+      ...staff,
     });
     setIsEditDialogOpen(true);
   };
@@ -313,7 +438,7 @@ export default function StaffManagement() {
   const handleUpdateStaff = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-    
+
     try {
       // First update the staff data
       const updatedStaff = await updateStaff(editStaffData.id, {
@@ -321,6 +446,8 @@ export default function StaffManagement() {
         lastName: editStaffData.lastName,
         email: editStaffData.email,
         isFired: editStaffData.isFired,
+        phoneNumber: editStaffData.phoneNumber,
+        department: editStaffData.department,
       });
 
       // If there's a new photo, upload it
@@ -329,9 +456,11 @@ export default function StaffManagement() {
       }
 
       // Update local state
-      setStaffData(staffData.map(staff => 
-        staff.id === editStaffData.id ? { ...staff, ...updatedStaff } : staff
-      ));
+      setStaffData(
+        staffData.map((staff) =>
+          staff.id === editStaffData.id ? { ...staff, ...updatedStaff } : staff
+        )
+      );
 
       setIsEditDialogOpen(false);
       setEditStaffData(null);
@@ -371,22 +500,144 @@ export default function StaffManagement() {
   const handleProfilePictureUpload = async (staffId, file) => {
     try {
       const formData = new FormData();
-      formData.append('file', file);
-      
+      formData.append("file", file);
+
       await uploadStaffProfilePicture(staffId, formData);
-      
+
       // Refresh staff data to get updated photo URL
       const updatedStaff = await getStaffById(staffId);
-      setStaffData(staffData.map(staff => 
-        staff.id === staffId ? { ...staff, profilePicture: updatedStaff.profilePicture } : staff
-      ));
+      
+      // Fetch new profile image and update in staffImages state
+      const newImageUrl = await fetchStaffProfileImage(staffId);
+      setStaffImages(prev => ({
+        ...prev,
+        [staffId]: newImageUrl
+      }));
+      
+      // Update staff data
+      setStaffData(
+        staffData.map((staff) =>
+          staff.id === staffId
+            ? { ...staff, profilePicture: updatedStaff.profilePicture }
+            : staff
+        )
+      );
+      
       setSuccessMessage("Profile picture updated successfully");
       setError(""); // Clear any existing errors
     } catch (err) {
       console.error("Error uploading profile picture:", err);
-      setError(err.message || "Failed to upload profile picture. Please try again.");
+      setError(
+        err.message || "Failed to upload profile picture. Please try again."
+      );
     }
   };
+
+  // Handle delete staff confirmation
+  const handleConfirmDelete = async () => {
+    if (!staffToDelete) {
+      console.error("No staff selected for deletion");
+      setError("No staff selected for deletion");
+      return;
+    }
+
+    // Start with a clean error state
+    setError("");
+
+    try {
+      // Check if we have the correct ID
+      if (!staffToDelete.id) {
+        console.error("Staff ID is missing", staffToDelete);
+        setError("Unable to delete staff: Staff ID is missing");
+        return;
+      }
+
+      console.log(
+        `Attempting to delete staff member: ${staffToDelete.firstName} ${staffToDelete.lastName} (ID: ${staffToDelete.id})`
+      );
+
+      // Add a loading state
+      setIsLoading(true);
+
+      // Try to delete the staff member
+      await deleteStaff(staffToDelete.id);
+
+      // If successful, update UI
+      setStaffData(staffData.filter((staff) => staff.id !== staffToDelete.id));
+      setSuccessMessage(
+        `Staff member ${staffToDelete.firstName} ${staffToDelete.lastName} deleted successfully`
+      );
+      setIsDeleteDialogOpen(false);
+      setStaffToDelete(null);
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSuccessMessage("");
+      }, 3000);
+    } catch (err) {
+      console.error("Error deleting staff:", err);
+
+      // Determine if this is a network error
+      const isNetworkError =
+        err.message &&
+        (err.message.includes("network") ||
+          err.message.includes("fetch") ||
+          err.message.includes("Failed to") ||
+          err.message.includes("ECONNREFUSED") ||
+          err.message.includes("CORS"));
+
+      // Extract the most useful error message
+      let errorMessage;
+
+      if (isNetworkError) {
+        errorMessage =
+          "Network error: Could not connect to the server. Please check your connection and try again.";
+      } else if (err.message) {
+        errorMessage = err.message;
+      } else {
+        errorMessage = "Failed to delete staff member. Please try again.";
+      }
+
+      // Log full error details to console for debugging
+      console.log("Staff to delete:", staffToDelete);
+      console.log("Full error object:", err);
+
+      // Set the error message
+      setError(errorMessage);
+
+      // Don't close the dialog so the user can see the error
+      // Keep the dialog open if there's an error
+
+      // Clear error message after 8 seconds
+      setTimeout(() => {
+        setError("");
+      }, 8000);
+    } finally {
+      // Always reset loading state
+      setIsLoading(false);
+    }
+  };
+
+  // Add effect to fetch profile image when a staff is selected for viewing
+  useEffect(() => {
+    if (selectedStaff?.id && isViewDialogOpen) {
+      // Clear previous image first
+      setSelectedStaffImage("");
+      
+      // Fetch the profile image
+      const loadProfileImage = async () => {
+        try {
+          const imageUrl = await fetchStaffProfileImage(selectedStaff.id);
+          setSelectedStaffImage(imageUrl);
+        } catch (err) {
+          console.error("Error fetching profile image:", err);
+          // Don't set error state to avoid disrupting the UI
+        }
+      };
+      
+      loadProfileImage();
+    }
+  }, [selectedStaff, isViewDialogOpen]);
 
   return (
     <AdminLayout>
@@ -394,7 +645,10 @@ export default function StaffManagement() {
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <h1 className="text-2xl md:text-3xl font-bold">Staff Management</h1>
-          <Dialog open={isAddStaffDialogOpen} onOpenChange={setIsAddStaffDialogOpen}>
+          <Dialog
+            open={isAddStaffDialogOpen}
+            onOpenChange={setIsAddStaffDialogOpen}
+          >
             <DialogTrigger asChild>
               <Button className="w-full sm:w-auto flex items-center justify-center gap-2">
                 <UserPlus className="h-4 w-4" />
@@ -420,7 +674,8 @@ export default function StaffManagement() {
                     <Avatar className="h-24 w-24">
                       <AvatarImage src={photoPreview} alt="Profile preview" />
                       <AvatarFallback>
-                        {newStaffData.firstName?.[0]}{newStaffData.lastName?.[0]}
+                        {newStaffData.firstName?.[0]}
+                        {newStaffData.lastName?.[0]}
                       </AvatarFallback>
                     </Avatar>
                     <div className="absolute bottom-0 right-0 flex gap-2">
@@ -525,6 +780,42 @@ export default function StaffManagement() {
                     required
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="department">Department</Label>
+                  <Select
+                    value={newStaffData.department}
+                    onValueChange={(value) =>
+                      setNewStaffData({
+                        ...newStaffData,
+                        department: value,
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <span>{newStaffData.department || "Select Department"}</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departmentOptions.map((dept) => (
+                        <SelectItem key={dept} value={dept}>
+                          {dept}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phoneNumber">Phone Number</Label>
+                  <Input
+                    id="phoneNumber"
+                    value={newStaffData.phoneNumber}
+                    onChange={(e) =>
+                      setNewStaffData({
+                        ...newStaffData,
+                        phoneNumber: e.target.value,
+                      })
+                    }
+                  />
+                </div>
                 <DialogFooter>
                   <Button type="submit" disabled={isLoading}>
                     {isLoading ? "Adding..." : "Add Staff"}
@@ -561,6 +852,23 @@ export default function StaffManagement() {
                 <SelectItem value="fired">Fired</SelectItem>
               </SelectContent>
             </Select>
+            
+            <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+              <SelectTrigger className="w-[180px]">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  <span>Department</span>
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {departmentOptions.map((dept) => (
+                  <SelectItem key={dept} value={dept}>
+                    {dept}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -584,17 +892,26 @@ export default function StaffManagement() {
                   {/* Header with Photo and Name */}
                   <div className="flex items-start gap-4">
                     <Avatar className="h-16 w-16">
-                      <AvatarImage src={`http://10.10.10.182:3000${staff.profilePicture}`} alt={`${staff.firstName} ${staff.lastName}`} />
+                      <AvatarImage
+                        src={staff.id ? staffImages[staff.id] || "" : ""}
+                        alt={`${staff.firstName} ${staff.lastName}`}
+                      />
                       <AvatarFallback>
-                        {staff.firstName?.[0]}{staff.lastName?.[0]}
+                        {staff.firstName?.[0]}
+                        {staff.lastName?.[0]}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
                       <h3 className="font-semibold text-lg">
                         {staff.firstName} {staff.lastName}
                       </h3>
-                      <p className="text-sm text-muted-foreground">{staff.email}</p>
-                      <Badge variant={staff.role === 'admin' ? "admin" : "staff"} className="mt-1 capitalize">
+                      <p className="text-sm text-muted-foreground">
+                        {staff.email}
+                      </p>
+                      <Badge
+                        variant={staff.role === "admin" ? "admin" : "staff"}
+                        className="mt-1 capitalize"
+                      >
                         {staff.role}
                       </Badge>
                     </div>
@@ -603,17 +920,39 @@ export default function StaffManagement() {
                   {/* Staff Details */}
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Staff ID</span>
+                      <span className="text-sm text-muted-foreground">
+                        Staff ID
+                      </span>
                       <span className="font-medium">{staff.staffId}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Status</span>
+                      <span className="text-sm text-muted-foreground">
+                        Status
+                      </span>
                       <Badge variant={staff.isActive ? "success" : "outline"}>
                         {staff.isActive ? "Active" : "Inactive"}
                       </Badge>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Joined</span>
+                      <span className="text-sm text-muted-foreground">
+                        Department
+                      </span>
+                      <span className="font-medium">
+                        {staff.department || "N/A"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">
+                        Phone
+                      </span>
+                      <span className="font-medium">
+                        {staff.phoneNumber || "N/A"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">
+                        Joined
+                      </span>
                       <span className="text-sm">
                         {new Date(staff.createdAt).toLocaleDateString()}
                       </span>
@@ -631,28 +970,46 @@ export default function StaffManagement() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => handleViewStaff(staff)}>
+                        <DropdownMenuItem
+                          onClick={() => handleViewStaff(staff)}
+                        >
                           <Eye className="h-4 w-4 mr-2" />
                           View Details
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => {
-                          setSelectedStaffForPhoto(staff);
-                          setIsProfilePictureDialogOpen(true);
-                        }}>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setSelectedStaffForPhoto(staff);
+                            setIsProfilePictureDialogOpen(true);
+                          }}
+                        >
                           <Camera className="h-4 w-4 mr-2" />
                           Upload Photo
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => {
-                          setSelectedStaffForPassword(staff);
-                          setIsPasswordDialogOpen(true);
-                        }}>
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setSelectedStaffForPassword(staff);
+                            setIsPasswordDialogOpen(true);
+                          }}
+                        >
                           <Key className="h-4 w-4 mr-2" />
                           Change Password
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleResetPassword(staff.id)}>
+                        <DropdownMenuItem
+                          onClick={() => handleResetPassword(staff.id)}
+                        >
                           <RefreshCw className="h-4 w-4 mr-2" />
                           Reset Password
                         </DropdownMenuItem>
+                        {/* <DropdownMenuItem
+                          onClick={() => {
+                            setStaffToDelete(staff);
+                            setIsDeleteDialogOpen(true);
+                          }}
+                          className="text-red-500"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Staff
+                        </DropdownMenuItem> */}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -675,17 +1032,28 @@ export default function StaffManagement() {
               <div className="space-y-6 py-4">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-20 w-20">
-                    <AvatarImage src={`http://10.10.10.182:3000${selectedStaff.profilePicture}`} alt={`${selectedStaff.firstName} ${selectedStaff.lastName}`} />
+                    <AvatarImage
+                      src={selectedStaffImage || ""}
+                      alt={`${selectedStaff?.firstName} ${selectedStaff?.lastName}`}
+                    />
                     <AvatarFallback>
-                      {selectedStaff.firstName?.[0]}{selectedStaff.lastName?.[0]}
+                      {selectedStaff?.firstName?.[0]}
+                      {selectedStaff?.lastName?.[0]}
                     </AvatarFallback>
                   </Avatar>
                   <div>
                     <h2 className="text-xl font-semibold">
                       {selectedStaff.firstName} {selectedStaff.lastName}
                     </h2>
-                    <p className="text-muted-foreground">{selectedStaff.email}</p>
-                    <Badge variant={selectedStaff.role === 'admin' ? "admin" : "staff"} className="mt-2 capitalize">
+                    <p className="text-muted-foreground">
+                      {selectedStaff.email}
+                    </p>
+                    <Badge
+                      variant={
+                        selectedStaff.role === "admin" ? "admin" : "staff"
+                      }
+                      className="mt-2 capitalize"
+                    >
                       {selectedStaff.role}
                     </Badge>
                   </div>
@@ -697,9 +1065,25 @@ export default function StaffManagement() {
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">Status</p>
-                    <Badge variant={selectedStaff.isActive ? "success" : "outline"}>
+                    <Badge
+                      variant={selectedStaff.isActive ? "success" : "outline"}
+                    >
                       {selectedStaff.isActive ? "Active" : "Inactive"}
                     </Badge>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Department</p>
+                    <p className="font-medium">
+                      {selectedStaff.department || "N/A"}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">
+                      Phone Number
+                    </p>
+                    <p className="font-medium">
+                      {selectedStaff.phoneNumber || "N/A"}
+                    </p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-sm text-muted-foreground">Join Date</p>
@@ -708,7 +1092,9 @@ export default function StaffManagement() {
                     </p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Last Updated</p>
+                    <p className="text-sm text-muted-foreground">
+                      Last Updated
+                    </p>
                     <p className="font-medium">
                       {new Date(selectedStaff.updatedAt).toLocaleDateString()}
                     </p>
@@ -733,9 +1119,13 @@ export default function StaffManagement() {
                 <div className="flex flex-col items-center space-y-4">
                   <div className="relative">
                     <Avatar className="h-24 w-24">
-                      <AvatarImage src={photoPreview || editStaffData.profilePicture} alt="Profile preview" />
+                      <AvatarImage
+                        src={photoPreview || editStaffData.profilePicture}
+                        alt="Profile preview"
+                      />
                       <AvatarFallback>
-                        {editStaffData.firstName?.[0]}{editStaffData.lastName?.[0]}
+                        {editStaffData.firstName?.[0]}
+                        {editStaffData.lastName?.[0]}
                       </AvatarFallback>
                     </Avatar>
                     <div className="absolute bottom-0 right-0 flex gap-2">
@@ -814,6 +1204,42 @@ export default function StaffManagement() {
                     required
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="editDepartment">Department</Label>
+                  <Select
+                    value={editStaffData.department || ""}
+                    onValueChange={(value) =>
+                      setEditStaffData({
+                        ...editStaffData,
+                        department: value,
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-full" id="editDepartment">
+                      <span>{editStaffData.department || "Select Department"}</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departmentOptions.map((dept) => (
+                        <SelectItem key={dept} value={dept}>
+                          {dept}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="editPhoneNumber">Phone Number</Label>
+                  <Input
+                    id="editPhoneNumber"
+                    value={editStaffData.phoneNumber || ""}
+                    onChange={(e) =>
+                      setEditStaffData({
+                        ...editStaffData,
+                        phoneNumber: e.target.value,
+                      })
+                    }
+                  />
+                </div>
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="editIsFired"
@@ -839,12 +1265,16 @@ export default function StaffManagement() {
         </Dialog>
 
         {/* Add Password Change Dialog */}
-        <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
+        <Dialog
+          open={isPasswordDialogOpen}
+          onOpenChange={setIsPasswordDialogOpen}
+        >
           <DialogContent className="sm:max-w-[400px]">
             <DialogHeader>
               <DialogTitle>Change Staff Password</DialogTitle>
               <DialogDescription>
-                Enter a new password for {selectedStaffForPassword?.firstName} {selectedStaffForPassword?.lastName}.
+                Enter a new password for {selectedStaffForPassword?.firstName}{" "}
+                {selectedStaffForPassword?.lastName}.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -874,7 +1304,10 @@ export default function StaffManagement() {
               <Button
                 onClick={() => {
                   if (selectedStaffForPassword) {
-                    handleChangePassword(selectedStaffForPassword.id, newPassword);
+                    handleChangePassword(
+                      selectedStaffForPassword.id,
+                      newPassword
+                    );
                     setIsPasswordDialogOpen(false);
                     setSelectedStaffForPassword(null);
                     setNewPassword("");
@@ -889,21 +1322,32 @@ export default function StaffManagement() {
         </Dialog>
 
         {/* Add Profile Picture Upload Dialog */}
-        <Dialog open={isProfilePictureDialogOpen} onOpenChange={setIsProfilePictureDialogOpen}>
+        <Dialog
+          open={isProfilePictureDialogOpen}
+          onOpenChange={setIsProfilePictureDialogOpen}
+        >
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>Upload Profile Picture</DialogTitle>
               <DialogDescription>
-                Upload a new profile picture for {selectedStaffForPhoto?.firstName} {selectedStaffForPhoto?.lastName}.
+                Upload a new profile picture for{" "}
+                {selectedStaffForPhoto?.firstName}{" "}
+                {selectedStaffForPhoto?.lastName}.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="flex flex-col items-center space-y-4">
                 <div className="relative">
                   <Avatar className="h-24 w-24">
-                    <AvatarImage src={photoPreview || selectedStaffForPhoto?.profilePicture} alt="Profile preview" />
+                    <AvatarImage
+                      src={
+                        photoPreview || selectedStaffForPhoto?.profilePicture
+                      }
+                      alt="Profile preview"
+                    />
                     <AvatarFallback>
-                      {selectedStaffForPhoto?.firstName?.[0]}{selectedStaffForPhoto?.lastName?.[0]}
+                      {selectedStaffForPhoto?.firstName?.[0]}
+                      {selectedStaffForPhoto?.lastName?.[0]}
                     </AvatarFallback>
                   </Avatar>
                   <Button
@@ -949,7 +1393,10 @@ export default function StaffManagement() {
               <Button
                 onClick={() => {
                   if (selectedStaffForPhoto && selectedPhoto) {
-                    handleProfilePictureUpload(selectedStaffForPhoto.id, selectedPhoto);
+                    handleProfilePictureUpload(
+                      selectedStaffForPhoto.id,
+                      selectedPhoto
+                    );
                     setIsProfilePictureDialogOpen(false);
                     setSelectedStaffForPhoto(null);
                     handleRemovePhoto();
@@ -970,7 +1417,108 @@ export default function StaffManagement() {
             <AlertDescription>{successMessage}</AlertDescription>
           </Alert>
         )}
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog
+          open={isDeleteDialogOpen}
+          onOpenChange={setIsDeleteDialogOpen}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Staff Member</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this staff member?
+                {staffToDelete && (
+                  <span className="mt-2 font-semibold block">
+                    {staffToDelete.firstName} {staffToDelete.lastName} (
+                    {staffToDelete.staffId})
+                  </span>
+                )}
+                <span className="mt-2 text-red-500 block">
+                  This action cannot be undone.
+                </span>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            {/* Display any errors in the dialog */}
+            {error && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setStaffToDelete(null)}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleConfirmDelete}
+                className="bg-red-600 text-white hover:bg-red-700"
+                disabled={isLoading}
+              >
+                {isLoading ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {successMessage && (
+          <Alert
+            className="fixed bottom-4 right-4 max-w-md bg-green-50 border-green-200 text-green-800 z-50"
+            variant="success"
+          >
+            <AlertDescription>{successMessage}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Add the Image Crop Dialog */}
+        <Dialog open={showCropDialog} onOpenChange={setShowCropDialog}>
+          <DialogContent className="sm:max-w-[500px] w-[95vw]">
+            <DialogHeader>
+              <DialogTitle>Crop Profile Image</DialogTitle>
+              <DialogDescription>
+                Adjust the crop area to select the part of the image you want to use.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="relative w-full overflow-hidden">
+                {imgSrc && (
+                  <ReactCrop
+                    crop={crop}
+                    onChange={onCropChange}
+                    circularCrop
+                    aspect={1}
+                  >
+                    <img
+                      ref={imgRef}
+                      src={imgSrc}
+                      alt="Crop preview"
+                      onLoad={onImageLoad}
+                      className="max-w-full h-auto"
+                    />
+                  </ReactCrop>
+                )}
+                <canvas ref={canvasRef} className="hidden" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCropDialog(false);
+                  setImgSrc("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleCropComplete}>
+                Apply Crop
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );
-} 
+}

@@ -119,12 +119,13 @@ export default function ReportLogsPage() {
   // Static departments list
   const DEPARTMENTS = [
     "Electronic Unit",
+    "Production Unit",
     "Moulding Unit",
     "GIS",
     "Payload",
     "3D & CNC",
     "Health & Safety",
-    "Pilots"
+    "Pilots",
   ];
   
   // Department states - no need for loading state
@@ -863,98 +864,6 @@ export default function ReportLogsPage() {
     }
   };
 
-  // More robust function to open PDFs with authentication 
-  const openAuthenticatedPdf = (url, authToken) => {
-    // Create a hidden form
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = url;
-    form.target = '_blank';
-    form.style.display = 'none';
-    
-    // Add the token as a hidden field
-    const tokenField = document.createElement('input');
-    tokenField.type = 'hidden';
-    tokenField.name = 'token';
-    tokenField.value = authToken || '';
-    form.appendChild(tokenField);
-    
-    // Add a field to indicate this is for viewing
-    const viewField = document.createElement('input');
-    viewField.type = 'hidden';
-    viewField.name = 'view';
-    viewField.value = 'true';
-    form.appendChild(viewField);
-    
-    // Submit the form
-    document.body.appendChild(form);
-    form.submit();
-    
-    // Clean up
-    setTimeout(() => {
-      document.body.removeChild(form);
-    }, 100);
-  };
-
-  // Handle PDF files specially - open in new tab for preview if possible
-  const handlePdfFile = (fileUrl, fileName, fileId) => {
-    if (!fileId && !fileUrl) {
-      console.error("No file ID or URL provided");
-      setError("File information is missing. Cannot open the PDF.");
-      return;
-    }
-    
-    try {
-      let viewUrl;
-      
-      if (fileId) {
-        // Use the direct file endpoint with the file ID
-        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-        viewUrl = `${API_BASE_URL}/reports/logs/files/${fileId}`;
-        console.log(`Opening PDF using direct endpoint: ${viewUrl}`);
-        
-        // For direct endpoints, we can use the simple window.open approach
-        // since the browser will include cookies for same-origin requests
-        if (token) {
-          // Try using the more robust method for authenticated viewing
-          openAuthenticatedPdf(viewUrl, token);
-        } else {
-          window.open(viewUrl, '_blank');
-        }
-      } else {
-        // Fall back to the old URL method if file ID is not available
-        viewUrl = fileUrl;
-        if (fileUrl.startsWith('/')) {
-          const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-          const pathWithoutApi = fileUrl.startsWith('/api/') ? fileUrl.substring(4) : fileUrl;
-          viewUrl = `${API_BASE_URL.replace(/\/$/, '')}${pathWithoutApi}`;
-        }
-        console.log(`Opening PDF using URL method: ${viewUrl}`);
-        
-        // For URL-based viewing, we'll use a simple window.open
-        window.open(viewUrl, '_blank');
-      }
-      
-      setSuccess(`Opening PDF: ${fileName} in a new tab`);
-    } catch (err) {
-      console.error("Error opening PDF:", err);
-      setError(`Failed to open PDF: ${err.message || "Unknown error"}`);
-      
-      // Fallback to regular download if opening fails
-      handleDownloadFile(fileUrl, fileName, fileId).catch(error => {
-        console.error("Fallback download also failed:", error);
-      });
-    }
-  };
-
-  // Helper to check if a file is a PDF based on name or type
-  const isPdfFile = (file) => {
-    return (
-      (file.fileName && file.fileName.toLowerCase().endsWith('.pdf')) || 
-      (file.fileType && file.fileType.toLowerCase() === 'application/pdf')
-    );
-  };
-
   // Helper to format file size
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return bytes + ' bytes';
@@ -1460,7 +1369,7 @@ Remark: ${log.remark || "None"}
                                       
                                       // Show final results
                                       if (failureCount === 0) {
-                                        setSuccess(`Successfully downloaded all ${successCount} file${successCount !== 1 ? 's' : ''} from log "${log.task}".`);
+                                        setSuccess(`Successfully downloaded all ${successCount} file${successCount !== 1 ? 's' : ''}.`);
                                       } else {
                                         setError(`Downloaded ${successCount} file${successCount !== 1 ? 's' : ''}, but ${failureCount} file${failureCount !== 1 ? 's' : ''} failed to download.`);
                                       }
@@ -1631,15 +1540,6 @@ Remark: ${log.remark || "None"}
                                     <Trash2 className="h-4 w-4 mr-2" />
                                     Delete Now
                                   </DropdownMenuItem>
-                                  {isPdfFile(file) && file.fileUrl && (
-                                    <DropdownMenuItem 
-                                      onClick={() => handlePdfFile(file.fileUrl, file.fileName, file.id)}
-                                      className="text-blue-600"
-                                    >
-                                      <FileText className="h-4 w-4 mr-2" />
-                                      View PDF
-                                    </DropdownMenuItem>
-                                  )}
                                   {file.fileUrl && (
                                     <DropdownMenuItem 
                                       onClick={() => {
@@ -1830,18 +1730,6 @@ Remark: ${log.remark || "None"}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {isPdfFile(file) && (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            title="View PDF in browser"
-                            onClick={() => handlePdfFile(file.fileUrl, file.fileName, file.id)}
-                            className="text-blue-600 hover:text-blue-800"
-                          >
-                            <FileText className="h-4 w-4 mr-1" />
-                            View
-                          </Button>
-                        )}
                         <Button 
                           variant="ghost" 
                           size="icon"

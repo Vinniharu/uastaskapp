@@ -163,10 +163,10 @@ export default function TasksPage() {
     
     try {
       // Use the full URL from the API example
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://00df-105-114-3-98.ngrok-free.app';
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
       
       const response = await retryWithBackoff(async () => {
-        const res = await fetch(`${apiUrl}/api/tasks/${taskId}/status`, {
+        const res = await fetch(`${apiUrl}/tasks/${taskId}/status`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${token}`,
