@@ -413,13 +413,58 @@ export default function ReportLogsPage() {
     }));
   };
 
-  // Handle immediate file deletion
-  const handleDeleteFile = async (fileId, fileName) => {
+  // Handle file deletion from the file viewer
+  const handleFileViewerDelete = async (fileId, fileName) => {
+    setError(""); // Clear previous errors
+    setSuccess(""); // Clear previous success messages
+    
     try {
-      console.log(`Deleting file ${fileId} (${fileName}) using endpoint: /api/reports/logs/files/${fileId}`);
+      console.log(`Deleting file ${fileId} (${fileName}) from file viewer`);
+      
+      // Call the API to delete the file
       await deleteReportLogFile(fileId);
       
-      // Update the UI to remove the file
+      // Update the UI after successful deletion
+      
+      // 1. Update the selected files list
+      setSelectedFiles(prev => prev.filter(file => file.id !== fileId));
+      
+      // 2. Update the logs data to reflect the deletion
+      setLogs(prevLogs => 
+        prevLogs.map(log => {
+          if (log.files && Array.isArray(log.files)) {
+            return {
+              ...log,
+              files: log.files.filter(file => file.id !== fileId)
+            };
+          }
+          return log;
+        })
+      );
+      
+      // Show success message
+      setSuccess(`File "${fileName}" was successfully deleted.`);
+      
+      return true;
+    } catch (error) {
+      console.error(`Error deleting file ${fileId}:`, error);
+      setError(`Failed to delete file: ${error.message || "Unknown error"}`);
+      return false;
+    }
+  };
+
+  // Handle immediate file deletion
+  const handleDeleteFile = async (fileId, fileName) => {
+    setError(""); // Clear previous errors
+    setSuccess(""); // Clear previous success messages
+    
+    try {
+      console.log(`Deleting file ${fileId} (${fileName}) using endpoint: /reports/logs/files/${fileId}`);
+      
+      // Call the API to delete the file
+      await deleteReportLogFile(fileId);
+      
+      // Update the UI after successful deletion
       setEditLog(prev => ({
         ...prev,
         files: prev.files.filter(file => file.id !== fileId)
@@ -438,32 +483,35 @@ export default function ReportLogsPage() {
 
   // Upload files to the server and attach them to a log
   const uploadFiles = async (files, logId) => {
-    if (!files.length || !logId) return [];
+    if (!files || !files.length || !logId) {
+      console.log('No files to upload or missing logId');
+      return [];
+    }
+    
+    console.log(`Preparing to upload ${files.length} files for log ID: ${logId}`);
     
     const formData = new FormData();
-    // No need to append logId to formData anymore as it's passed as a query parameter
     
     // Append each file to the FormData using the standardized "files" field name
     files.forEach(file => {
       formData.append('files', file);
+      console.log(`Added file to FormData: ${file.name} (${formatFileSize(file.size)})`);
     });
     
-    console.log(`Preparing to upload ${files.length} files for log ID: ${logId} to endpoint: /api/reports/logs/files?logId=${logId}`);
+    console.log(`Sending files to endpoint: /reports/logs/files?logId=${logId}`);
     
-    // Upload the files to the server using the updated endpoint
     try {
-      // Show more detailed information for debugging
-      console.log(`Starting file upload for log ${logId} with ${files.length} files`);
-      
+      // Call the API to upload the files
       const result = await uploadReportLogFiles(logId, formData);
       
       console.log(`File upload successful for log ${logId}:`, result);
       
-      if (!result.files || result.files.length === 0) {
+      if (!result.files || !Array.isArray(result.files) || result.files.length === 0) {
         console.warn(`Server responded with success but no files were returned for log ${logId}`);
+        return [];
       }
       
-      return result.files || [];
+      return result.files;
     } catch (error) {
       console.error(`Error uploading files for log ${logId}:`, error);
       
@@ -523,21 +571,8 @@ export default function ReportLogsPage() {
       const createdLog = await createReportLog(formattedLog);
       console.log("Log created successfully:", createdLog);
       
-      // Upload files if any are selected and attach them to the created log
-      if (selectedUploadFiles.length > 0) {
-        try {
-          console.log(`Uploading ${selectedUploadFiles.length} files for log ID: ${createdLog.id} using separate endpoint`);
-          const uploadedFiles = await uploadFiles(selectedUploadFiles, createdLog.id);
-          console.log("Files uploaded successfully:", uploadedFiles);
-          setSuccess(`Log created successfully with ${uploadedFiles.length} files attached.`);
-        } catch (fileError) {
-          console.error("Error uploading files:", fileError);
-          setError(`Log created but files could not be uploaded: ${fileError.message || "Unknown error"}`);
-          // Continue with the process despite file upload error
-        }
-      } else {
-        setSuccess("Log added successfully!");
-      }
+      // After successful log creation, handle file uploads separately
+      await handleAddLogFiles(createdLog.id);
       
       // Refresh logs to include the new one
       await fetchLogs();
@@ -563,6 +598,34 @@ export default function ReportLogsPage() {
       setIsSubmitting(false);
     }
   };
+  
+  // Handle file uploads for a newly created log
+  const handleAddLogFiles = async (logId) => {
+    try {
+      // Upload files if any are selected
+      if (selectedUploadFiles.length > 0) {
+        try {
+          console.log(`Uploading ${selectedUploadFiles.length} files for log ID: ${logId}`);
+          const uploadedFiles = await uploadFiles(selectedUploadFiles, logId);
+          console.log("Files uploaded successfully:", uploadedFiles);
+          const actualUploadCount = Array.isArray(uploadedFiles) ? uploadedFiles.length : 0;
+          setSuccess(`Log created successfully with ${actualUploadCount} file${actualUploadCount !== 1 ? 's' : ''} attached.`);
+          return true;
+        } catch (fileError) {
+          console.error("Error uploading files:", fileError);
+          setError(`Log created but files could not be uploaded: ${fileError.message || "Unknown error"}`);
+          return false;
+        }
+      } else {
+        setSuccess("Log created successfully. No files attached.");
+        return true;
+      }
+    } catch (error) {
+      console.error("Error handling log files:", error);
+      setError(`Error handling files: ${error.message || "Unknown error"}`);
+      return false;
+    }
+  };
 
   // Update existing log
   const handleUpdateLog = async (e) => {
@@ -580,78 +643,13 @@ export default function ReportLogsPage() {
           : new Date().toISOString()
       };
       
-      // Update the log first
+      // Update the log first (without file operations)
       console.log("Updating report log:", formattedLog);
       const updatedLog = await updateReportLog(editLog.id, formattedLog);
       console.log("Log updated successfully:", updatedLog);
       
-      // Handle file removals if any
-      let fileDeleteResults = { success: 0, failed: 0 };
-      
-      if (filesToRemove.length > 0) {
-        console.log(`Removing ${filesToRemove.length} files using endpoint: /api/reports/logs/files/{fileId}`);
-        
-        // Process files sequentially for better error handling
-        for (const fileId of filesToRemove) {
-          try {
-            console.log(`Deleting file ${fileId} using endpoint: /api/reports/logs/files/${fileId}`);
-            await deleteReportLogFile(fileId);
-            fileDeleteResults.success++;
-          } catch (err) {
-            console.error(`Error deleting file ${fileId}:`, err);
-            fileDeleteResults.failed++;
-          }
-        }
-        
-        console.log(`File deletion results: ${fileDeleteResults.success} successful, ${fileDeleteResults.failed} failed`);
-      }
-      
-      // Upload new files if any are selected using the separate endpoint
-      if (selectedEditFiles.length > 0) {
-        try {
-          console.log(`Uploading ${selectedEditFiles.length} files for log ID: ${updatedLog.id} using endpoint: /api/reports/logs/files?logId=${updatedLog.id}`);
-          const uploadedFiles = await uploadFiles(selectedEditFiles, updatedLog.id);
-          console.log("Files uploaded successfully:", uploadedFiles);
-          
-          let successMessage = `Log updated successfully with ${uploadedFiles.length} new files added`;
-          
-          if (filesToRemove.length > 0) {
-            successMessage += `, ${fileDeleteResults.success} files removed`;
-            if (fileDeleteResults.failed > 0) {
-              successMessage += ` (${fileDeleteResults.failed} file deletions failed)`;
-            }
-          }
-          
-          setSuccess(successMessage);
-        } catch (fileError) {
-          console.error("Error uploading files:", fileError);
-          
-          let errorMessage = `Log updated but new files could not be uploaded: ${fileError.message}`;
-          
-          if (filesToRemove.length > 0) {
-            errorMessage += `. ${fileDeleteResults.success} files were removed`;
-            if (fileDeleteResults.failed > 0) {
-              errorMessage += ` (${fileDeleteResults.failed} file deletions failed)`;
-            }
-          }
-          
-          setError(errorMessage);
-        }
-      } else if (filesToRemove.length > 0) {
-        let successMessage = `Log updated successfully`;
-        
-        if (fileDeleteResults.success > 0) {
-          successMessage += ` with ${fileDeleteResults.success} files removed`;
-        }
-        
-        if (fileDeleteResults.failed > 0) {
-          successMessage += ` (${fileDeleteResults.failed} file deletions failed)`;
-        }
-        
-        setSuccess(successMessage);
-      } else {
-        setSuccess("Log updated successfully!");
-      }
+      // After successful log update, handle file operations
+      await handleUpdateLogFiles(updatedLog.id);
       
       // Refresh logs to include the updates
       await fetchLogs();
@@ -667,6 +665,92 @@ export default function ReportLogsPage() {
       setSuccess(""); // Clear success message on error
     } finally {
       setIsEditing(false);
+    }
+  };
+  
+  // Handle file operations for an updated log
+  const handleUpdateLogFiles = async (logId) => {
+    let successMessage = "Log updated successfully";
+    let fileDeleteResults = { success: 0, failed: 0 };
+    
+    try {
+      // Handle file removals if any
+      if (filesToRemove.length > 0) {
+        console.log(`Removing ${filesToRemove.length} files using endpoint: /reports/logs/files/{fileId}`);
+        
+        // Process files sequentially for better error handling
+        for (const fileId of filesToRemove) {
+          try {
+            console.log(`Deleting file ${fileId} using endpoint: /reports/logs/files/${fileId}`);
+            await deleteReportLogFile(fileId);
+            fileDeleteResults.success++;
+          } catch (err) {
+            console.error(`Error deleting file ${fileId}:`, err);
+            fileDeleteResults.failed++;
+          }
+        }
+        
+        console.log(`File deletion results: ${fileDeleteResults.success} successful, ${fileDeleteResults.failed} failed`);
+      }
+      
+      // Upload new files if any are selected using the separate endpoint
+      if (selectedEditFiles.length > 0) {
+        try {
+          console.log(`Uploading ${selectedEditFiles.length} files for log ID: ${logId} using endpoint: /reports/logs/files?logId=${logId}`);
+          const uploadedFiles = await uploadFiles(selectedEditFiles, logId);
+          console.log("Files uploaded successfully:", uploadedFiles);
+          
+          const actualUploadCount = Array.isArray(uploadedFiles) ? uploadedFiles.length : 0;
+          if (actualUploadCount > 0) {
+            successMessage += ` with ${actualUploadCount} new file${actualUploadCount !== 1 ? 's' : ''} added`;
+          }
+          
+          if (fileDeleteResults.success > 0) {
+            successMessage += `, ${fileDeleteResults.success} file${fileDeleteResults.success !== 1 ? 's' : ''} removed`;
+          }
+          
+          if (fileDeleteResults.failed > 0) {
+            successMessage += ` (${fileDeleteResults.failed} file deletion${fileDeleteResults.failed !== 1 ? 's' : ''} failed)`;
+          }
+          
+          setSuccess(successMessage);
+        } catch (fileError) {
+          console.error("Error uploading files:", fileError);
+          
+          let errorMessage = `Log updated but new files could not be uploaded: ${fileError.message}`;
+          
+          if (fileDeleteResults.success > 0) {
+            errorMessage += `. ${fileDeleteResults.success} file${fileDeleteResults.success !== 1 ? 's' : ''} were removed`;
+          }
+          
+          if (fileDeleteResults.failed > 0) {
+            errorMessage += ` (${fileDeleteResults.failed} file deletion${fileDeleteResults.failed !== 1 ? 's' : ''} failed)`;
+          }
+          
+          setError(errorMessage);
+          return false;
+        }
+      } else if (filesToRemove.length > 0) {
+        // No uploads, only removals
+        if (fileDeleteResults.success > 0) {
+          successMessage += ` with ${fileDeleteResults.success} file${fileDeleteResults.success !== 1 ? 's' : ''} removed`;
+        }
+        
+        if (fileDeleteResults.failed > 0) {
+          successMessage += ` (${fileDeleteResults.failed} file deletion${fileDeleteResults.failed !== 1 ? 's' : ''} failed)`;
+        }
+        
+        setSuccess(successMessage);
+      } else {
+        // No file changes
+        setSuccess("Log updated successfully. No file changes made.");
+      }
+      
+      return true;
+    } catch (error) {
+      console.error("Error handling log files:", error);
+      setError(`Error handling files: ${error.message || "Unknown error"}`);
+      return false;
     }
   };
 
@@ -694,71 +778,83 @@ export default function ReportLogsPage() {
     }
   };
 
-  const handleDownloadFile = async (fileUrl, fileName) => {
-    if (!fileUrl) {
-      console.error("No file URL provided");
-      setError("File URL is missing. Cannot download the file.");
-      return;
+  const handleDownloadFile = async (fileUrl, fileName, fileId) => {
+    // If we have a fileId, prioritize that for direct download (new approach)
+    if (!fileId && !fileUrl) {
+      console.error("No file ID or URL provided");
+      setError("File information is missing. Cannot download the file.");
+      return false;
     }
     
     try {
-      // Handle relative URLs by prepending the API base URL
-      let fullUrl = fileUrl;
-      if (fileUrl.startsWith('/')) {
-        // This is a relative URL, prepend the API base URL
-        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-        
-        // Remove /api prefix if it's already in the fileUrl to avoid duplication
-        const pathWithoutApi = fileUrl.startsWith('/api/') ? fileUrl.substring(4) : fileUrl;
-        
-        // Make sure we don't have double slashes
-        fullUrl = `${API_BASE_URL.replace(/\/$/, '')}${pathWithoutApi}`;
-      }
-      
-      console.log(`Downloading file: ${fileName} from URL: ${fullUrl}`);
-      
       // Set a temporary loading message
       setSuccess(`Downloading file: ${fileName}...`);
       
-      // Use fetch to get the file as a blob
-      const authHeaders = {};
-      if (token) {
-        authHeaders.Authorization = `Bearer ${token}`;
+      let downloadUrl;
+      
+      if (fileId) {
+        // Use the direct file endpoint with the file ID
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+        downloadUrl = `${API_BASE_URL}/reports/logs/files/${fileId}`;
+        console.log(`Downloading file using direct endpoint: ${downloadUrl}`);
+      } else {
+        // Fall back to the old URL method if file ID is not available
+        downloadUrl = fileUrl;
+        if (fileUrl.startsWith('/')) {
+          const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+          const pathWithoutApi = fileUrl.startsWith('/api/') ? fileUrl.substring(4) : fileUrl;
+          downloadUrl = `${API_BASE_URL.replace(/\/$/, '')}${pathWithoutApi}`;
+        }
+        console.log(`Downloading file using URL method: ${downloadUrl}`);
       }
       
-      // Fetch the file with authentication
-      const response = await fetch(fullUrl, {
+      // Prepare authentication headers
+      const headers = {};
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      
+      // Using fetch to create a proper request with auth headers
+      const response = await fetch(downloadUrl, {
         method: 'GET',
-        headers: authHeaders,
+        headers: headers,
       });
       
       if (!response.ok) {
         throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
       }
       
-      // Convert the response to a blob
+      // Get the filename from the Content-Disposition header if available
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let downloadFileName = fileName;
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+?)"/);
+        if (filenameMatch && filenameMatch[1]) {
+          downloadFileName = filenameMatch[1];
+        }
+      }
+      
+      // Create a blob from the response
       const blob = await response.blob();
       
-      // Create a local URL for the blob
-      const blobUrl = URL.createObjectURL(blob);
-      
-      // Create a link and trigger download
+      // Create a download link
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = fileName || 'download';
+      link.href = url;
+      link.download = downloadFileName;
       
-      // For most browsers, we need to append the link to the DOM
+      // Trigger download
       document.body.appendChild(link);
       link.click();
       
       // Clean up
       setTimeout(() => {
         document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl); // Release the blob URL
+        URL.revokeObjectURL(url);
       }, 100);
       
-      setSuccess(`Successfully downloaded: ${fileName}`);
-      
+      setSuccess(`Successfully downloaded: ${downloadFileName}`);
       return true;
     } catch (err) {
       console.error("Error downloading file:", err);
@@ -767,32 +863,85 @@ export default function ReportLogsPage() {
     }
   };
 
+  // More robust function to open PDFs with authentication 
+  const openAuthenticatedPdf = (url, authToken) => {
+    // Create a hidden form
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = url;
+    form.target = '_blank';
+    form.style.display = 'none';
+    
+    // Add the token as a hidden field
+    const tokenField = document.createElement('input');
+    tokenField.type = 'hidden';
+    tokenField.name = 'token';
+    tokenField.value = authToken || '';
+    form.appendChild(tokenField);
+    
+    // Add a field to indicate this is for viewing
+    const viewField = document.createElement('input');
+    viewField.type = 'hidden';
+    viewField.name = 'view';
+    viewField.value = 'true';
+    form.appendChild(viewField);
+    
+    // Submit the form
+    document.body.appendChild(form);
+    form.submit();
+    
+    // Clean up
+    setTimeout(() => {
+      document.body.removeChild(form);
+    }, 100);
+  };
+
   // Handle PDF files specially - open in new tab for preview if possible
-  const handlePdfFile = (fileUrl, fileName) => {
-    if (!fileUrl) {
-      console.error("No file URL provided");
-      setError("File URL is missing. Cannot open the PDF.");
+  const handlePdfFile = (fileUrl, fileName, fileId) => {
+    if (!fileId && !fileUrl) {
+      console.error("No file ID or URL provided");
+      setError("File information is missing. Cannot open the PDF.");
       return;
     }
     
     try {
-      // Handle relative URLs by prepending the API base URL
-      let fullUrl = fileUrl;
-      if (fileUrl.startsWith('/')) {
+      let viewUrl;
+      
+      if (fileId) {
+        // Use the direct file endpoint with the file ID
         const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-        const pathWithoutApi = fileUrl.startsWith('/api/') ? fileUrl.substring(4) : fileUrl;
-        fullUrl = `${API_BASE_URL.replace(/\/$/, '')}${pathWithoutApi}`;
+        viewUrl = `${API_BASE_URL}/reports/logs/files/${fileId}`;
+        console.log(`Opening PDF using direct endpoint: ${viewUrl}`);
+        
+        // For direct endpoints, we can use the simple window.open approach
+        // since the browser will include cookies for same-origin requests
+        if (token) {
+          // Try using the more robust method for authenticated viewing
+          openAuthenticatedPdf(viewUrl, token);
+        } else {
+          window.open(viewUrl, '_blank');
+        }
+      } else {
+        // Fall back to the old URL method if file ID is not available
+        viewUrl = fileUrl;
+        if (fileUrl.startsWith('/')) {
+          const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+          const pathWithoutApi = fileUrl.startsWith('/api/') ? fileUrl.substring(4) : fileUrl;
+          viewUrl = `${API_BASE_URL.replace(/\/$/, '')}${pathWithoutApi}`;
+        }
+        console.log(`Opening PDF using URL method: ${viewUrl}`);
+        
+        // For URL-based viewing, we'll use a simple window.open
+        window.open(viewUrl, '_blank');
       }
       
-      // Open PDF in a new tab
-      window.open(fullUrl, '_blank');
       setSuccess(`Opening PDF: ${fileName} in a new tab`);
     } catch (err) {
       console.error("Error opening PDF:", err);
       setError(`Failed to open PDF: ${err.message || "Unknown error"}`);
       
       // Fallback to regular download if opening fails
-      handleDownloadFile(fileUrl, fileName).catch(error => {
+      handleDownloadFile(fileUrl, fileName, fileId).catch(error => {
         console.error("Fallback download also failed:", error);
       });
     }
@@ -811,39 +960,6 @@ export default function ReportLogsPage() {
     if (bytes < 1024) return bytes + ' bytes';
     else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
     else return (bytes / 1048576).toFixed(1) + ' MB';
-  };
-
-  // Handle file deletion from the file viewer
-  const handleFileViewerDelete = async (fileId, fileName) => {
-    try {
-      console.log(`Deleting file ${fileId} (${fileName}) from file viewer`);
-      await deleteReportLogFile(fileId);
-      
-      // Update the selected files list to remove the deleted file
-      setSelectedFiles(prev => prev.filter(file => file.id !== fileId));
-      
-      // Show success message
-      setSuccess(`File "${fileName}" was successfully deleted.`);
-      
-      // Also update the logs data to reflect the deletion
-      setLogs(prevLogs => 
-        prevLogs.map(log => {
-          if (log.files && Array.isArray(log.files)) {
-            return {
-              ...log,
-              files: log.files.filter(file => file.id !== fileId)
-            };
-          }
-          return log;
-        })
-      );
-      
-      return true;
-    } catch (error) {
-      console.error(`Error deleting file ${fileId}:`, error);
-      setError(`Failed to delete file: ${error.message || "Unknown error"}`);
-      return false;
-    }
   };
 
   // Loading state
@@ -1079,15 +1195,39 @@ export default function ReportLogsPage() {
 
         {error && (
           <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <div className="flex justify-between items-start w-full">
+              <div className="flex items-start">
+                <AlertCircle className="h-4 w-4 mt-0.5 mr-2" />
+                <AlertDescription>{error}</AlertDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setError("")}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </Alert>
         )}
 
         {success && (
           <Alert variant="success" className="bg-green-50 text-green-800 border-green-200">
-            <AlertCircle className="h-4 w-4 text-green-500" />
-            <AlertDescription>{success}</AlertDescription>
+            <div className="flex justify-between items-start w-full">
+              <div className="flex items-start">
+                <AlertCircle className="h-4 w-4 mt-0.5 mr-2 text-green-500" />
+                <AlertDescription>{success}</AlertDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-green-600 hover:text-green-800 hover:bg-green-100"
+                onClick={() => setSuccess("")}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </Alert>
         )}
 
@@ -1283,13 +1423,53 @@ Remark: ${log.remark || "None"}
                               </DropdownMenuItem>
                               {/* Add files view option on mobile */}
                               {log.files && log.files.length > 0 && (
-                                <DropdownMenuItem 
-                                  className="sm:hidden"
-                                  onClick={() => openFileViewer(log.files, log.task, log.id)}
-                                >
-                                  <Paperclip className="h-4 w-4 mr-2" />
-                                  View Files ({log.files.length})
-                                </DropdownMenuItem>
+                                <>
+                                  <DropdownMenuItem 
+                                    className="sm:hidden"
+                                    onClick={() => openFileViewer(log.files, log.task, log.id)}
+                                  >
+                                    <Paperclip className="h-4 w-4 mr-2" />
+                                    View Files ({log.files.length})
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={async () => {
+                                      // Download all files for this log
+                                      if (!log.files || log.files.length === 0) return;
+                                      
+                                      setSuccess(`Starting download of ${log.files.length} files...`);
+                                      
+                                      // Track success and failure counts
+                                      let successCount = 0;
+                                      let failureCount = 0;
+                                      
+                                      // Process files one at a time
+                                      for (const file of log.files) {
+                                        try {
+                                          // Using await to process files sequentially
+                                          const result = await handleDownloadFile(file.fileUrl, file.fileName, file.id);
+                                          if (result) {
+                                            successCount++;
+                                          } else {
+                                            failureCount++;
+                                          }
+                                        } catch (error) {
+                                          console.error(`Error downloading file ${file.fileName}:`, error);
+                                          failureCount++;
+                                        }
+                                      }
+                                      
+                                      // Show final results
+                                      if (failureCount === 0) {
+                                        setSuccess(`Successfully downloaded all ${successCount} file${successCount !== 1 ? 's' : ''} from log "${log.task}".`);
+                                      } else {
+                                        setError(`Downloaded ${successCount} file${successCount !== 1 ? 's' : ''}, but ${failureCount} file${failureCount !== 1 ? 's' : ''} failed to download.`);
+                                      }
+                                    }}
+                                  >
+                                    <DownloadCloud className="h-4 w-4 mr-2" />
+                                    Download All Files
+                                  </DropdownMenuItem>
+                                </>
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -1314,7 +1494,7 @@ Remark: ${log.remark || "None"}
             </DialogHeader>
             
             {editLog && (
-              <form onSubmit={handleUpdateLog}>
+              <form onSubmit={handleUpdateLog} className="h-[500px] overflow-y-auto">
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
                     <Label htmlFor="edit-date">Date</Label>
@@ -1453,7 +1633,7 @@ Remark: ${log.remark || "None"}
                                   </DropdownMenuItem>
                                   {isPdfFile(file) && file.fileUrl && (
                                     <DropdownMenuItem 
-                                      onClick={() => handlePdfFile(file.fileUrl, file.fileName)}
+                                      onClick={() => handlePdfFile(file.fileUrl, file.fileName, file.id)}
                                       className="text-blue-600"
                                     >
                                       <FileText className="h-4 w-4 mr-2" />
@@ -1464,7 +1644,7 @@ Remark: ${log.remark || "None"}
                                     <DropdownMenuItem 
                                       onClick={() => {
                                         // Need to handle the async function properly
-                                        handleDownloadFile(file.fileUrl, file.fileName)
+                                        handleDownloadFile(file.fileUrl, file.fileName, file.id)
                                           .catch(error => {
                                             console.error(`Error initiating download for ${file.fileName}:`, error);
                                             setError(`Failed to start download for ${file.fileName}: ${error.message || "Unknown error"}`);
@@ -1655,7 +1835,7 @@ Remark: ${log.remark || "None"}
                             variant="outline" 
                             size="sm"
                             title="View PDF in browser"
-                            onClick={() => handlePdfFile(file.fileUrl, file.fileName)}
+                            onClick={() => handlePdfFile(file.fileUrl, file.fileName, file.id)}
                             className="text-blue-600 hover:text-blue-800"
                           >
                             <FileText className="h-4 w-4 mr-1" />
@@ -1668,7 +1848,7 @@ Remark: ${log.remark || "None"}
                           title="Download file"
                           onClick={() => {
                             // Need to handle the async function properly
-                            handleDownloadFile(file.fileUrl, file.fileName)
+                            handleDownloadFile(file.fileUrl, file.fileName, file.id)
                               .catch(error => {
                                 console.error(`Error initiating download for ${file.fileName}:`, error);
                                 setError(`Failed to start download for ${file.fileName}: ${error.message || "Unknown error"}`);
@@ -1713,7 +1893,7 @@ Remark: ${log.remark || "None"}
                     for (const file of selectedFiles) {
                       try {
                         // Using await to process files sequentially
-                        const result = await handleDownloadFile(file.fileUrl, file.fileName);
+                        const result = await handleDownloadFile(file.fileUrl, file.fileName, file.id);
                         if (result) {
                           successCount++;
                         } else {
@@ -1727,9 +1907,9 @@ Remark: ${log.remark || "None"}
                     
                     // Show final results
                     if (failureCount === 0) {
-                      setSuccess(`Successfully downloaded all ${successCount} files.`);
+                      setSuccess(`Successfully downloaded all ${successCount} file${successCount !== 1 ? 's' : ''}.`);
                     } else {
-                      setError(`Downloaded ${successCount} files, but ${failureCount} files failed to download.`);
+                      setError(`Downloaded ${successCount} file${successCount !== 1 ? 's' : ''}, but ${failureCount} file${failureCount !== 1 ? 's' : ''} failed to download.`);
                     }
                   }}
                 >
