@@ -32,10 +32,11 @@ import {
   AlertTriangle,
   Eye,
   Edit,
-  X
+  X,
+  Trash2
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { getAllTasks, getAllStaff, updateTask } from "@/lib/api";
+import { getAllTasks, getAllStaff, updateTask, deleteTask } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -90,6 +91,13 @@ export default function CurrentTasks() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateError, setUpdateError] = useState("");
   const [updateSuccess, setUpdateSuccess] = useState(false);
+
+  // Add new state for delete dialog
+  const [taskToDelete, setTaskToDelete] = useState(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
 
   // Fetch tasks and users when component mounts
   useEffect(() => {
@@ -301,6 +309,45 @@ export default function CurrentTasks() {
     }
   };
 
+  // Handle delete dialog open
+  const handleDeleteTask = (task) => {
+    setTaskToDelete(task);
+    setIsDeleteDialogOpen(true);
+    setDeleteError("");
+    setDeleteSuccess(false);
+  };
+
+  // Submit task deletion
+  const handleConfirmDelete = async () => {
+    if (!taskToDelete) return;
+    
+    setIsDeleting(true);
+    setDeleteError("");
+    setDeleteSuccess(false);
+    
+    try {
+      // Call delete API
+      await deleteTask(taskToDelete.id);
+      
+      // Update the local state to remove the deleted task
+      setTasks(prevTasks => prevTasks.filter(task => task.id !== taskToDelete.id));
+      setFilteredTasks(prevFilteredTasks => prevFilteredTasks.filter(task => task.id !== taskToDelete.id));
+      
+      setDeleteSuccess(true);
+      
+      // Close the dialog after a short delay
+      setTimeout(() => {
+        setIsDeleteDialogOpen(false);
+        setTaskToDelete(null);
+      }, 1500);
+    } catch (err) {
+      console.error("Error deleting task:", err);
+      setDeleteError(err.message || "Failed to delete task. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <AdminLayout>
@@ -489,6 +536,14 @@ export default function CurrentTasks() {
                               <Edit className="h-4 w-4" />
                               Edit
                             </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="text-red-500 hover:text-red-700"
+                              onClick={() => handleDeleteTask(task)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -645,6 +700,55 @@ export default function CurrentTasks() {
                 </>
               ) : (
                 "Save Changes"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Task</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the task "{taskToDelete?.title}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {deleteError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{deleteError}</AlertDescription>
+              </Alert>
+            )}
+            {deleteSuccess && (
+              <Alert variant="success" className="mb-4 bg-green-50 text-green-800 border border-green-200">
+                <CheckCircle className="h-4 w-4" />
+                <AlertDescription>Task deleted successfully!</AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter className="flex space-x-2 justify-end">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting || deleteSuccess}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete Task'
               )}
             </Button>
           </DialogFooter>

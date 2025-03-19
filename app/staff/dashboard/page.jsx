@@ -69,7 +69,7 @@ export default function StaffDashboard() {
               Welcome, {userData.fullName || `${userData.firstName} ${userData.lastName}`} 
               {userData.staffId && ` (Staff ID: ${userData.staffId})`}
               {userData.role && (
-                <Badge variant={userData.role === "admin" ? "destructive" : "success"} className="ml-2">
+                <Badge variant={userData.role === "admin" ? "admin" : "staff"} className="ml-2">
                   {userData.role.charAt(0).toUpperCase() + userData.role.slice(1)}
                 </Badge>
               )}

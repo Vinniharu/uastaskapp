@@ -34,11 +34,32 @@ export default function StaffLogin() {
     }
   }, [searchParams]);
   
-  // If the user is already logged in, redirect them
+  // Modify the redirect logic to always check user role
   useEffect(() => {
     if (isStaffLoggedIn) {
-      console.log("User already logged in, redirecting to:", redirectUrl || '/staff/dashboard');
-      router.push(redirectUrl || '/staff/dashboard');
+      // Get the stored staff info
+      const storedStaffInfo = sessionStorage.getItem("staffInfo");
+      let userRole = "staff"; // Default role
+      
+      if (storedStaffInfo) {
+        try {
+          const staffData = JSON.parse(storedStaffInfo);
+          userRole = staffData.role || "staff";
+        } catch (error) {
+          console.error("Failed to parse staff info from sessionStorage", error);
+        }
+      }
+      
+      // Redirect based on user role
+      if (userRole === "admin") {
+        const adminDestination = redirectUrl.startsWith('/admin') ? redirectUrl : '/admin/dashboard';
+        console.log("Admin user detected, redirecting to:", adminDestination);
+        router.push(adminDestination);
+      } else {
+        const staffDestination = redirectUrl.startsWith('/staff') ? redirectUrl : '/staff/dashboard';
+        console.log("Staff user detected, redirecting to:", staffDestination);
+        router.push(staffDestination);
+      }
     }
   }, [isStaffLoggedIn, router, redirectUrl]);
 
@@ -75,18 +96,17 @@ export default function StaffLogin() {
       // This will store the authentication data in sessionStorage
       loginStaff(userInfo);
       
-      // Redirect based on user role or the redirect parameter
-      if (redirectUrl) {
-        console.log("Redirecting to requested page:", redirectUrl);
-        router.push(redirectUrl);
-      } else if (response.user.role === "admin") {
-        // Redirect admin users to admin dashboard
-        console.log("Redirecting to admin dashboard");
-        router.push("/admin/dashboard");
+      // Redirect based on user role
+      if (response.user.role === "admin") {
+        // Check if redirect URL is an admin URL, otherwise go to admin dashboard
+        const adminDestination = redirectUrl.startsWith('/admin') ? redirectUrl : '/admin/dashboard';
+        console.log("Admin user logged in, redirecting to:", adminDestination);
+        router.push(adminDestination);
       } else {
-        // Redirect regular staff to staff dashboard
-        console.log("Redirecting to staff dashboard");
-        router.push("/staff/dashboard");
+        // Check if redirect URL is a staff URL, otherwise go to staff dashboard
+        const staffDestination = redirectUrl.startsWith('/staff') ? redirectUrl : '/staff/dashboard';
+        console.log("Staff user logged in, redirecting to:", staffDestination);
+        router.push(staffDestination);
       }
     } catch (err) {
       console.error("Login error:", err);

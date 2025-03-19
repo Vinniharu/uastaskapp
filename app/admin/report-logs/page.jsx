@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { AdminLayout } from "@/app/components/AdminLayout";
-import { getReportLogs, createReportLog, updateReportLog, deleteReportLog } from "@/lib/api";
+import { getReportLogs, createReportLog, updateReportLog, deleteReportLog, exportReportLogsToCSV, uploadReportLogFiles, deleteReportLogFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,105 +60,6 @@ const formatDate = (dateString) => {
   }
 };
 
-// Sample departments
-const DEPARTMENTS = [
-  "Electronic Unit",
-  "Moulding Unit",
-  "GIS",
-  "Payload",
-  "3D & CNC",
-  "Health & Safety",
-  "Pilots"
-];
-
-// Dummy data generator
-const generateDummyLogs = () => {
-  const dummyData = [];
-  const statuses = ["completed", "in-progress", "pending", "failed"];
-  const tasks = [
-    "Website Redesign",
-    "Monthly Financial Report",
-    "Employee Onboarding",
-    "Product Launch",
-    "Customer Survey Analysis",
-    "System Maintenance",
-    "Marketing Campaign",
-    "Inventory Audit",
-    "Client Meeting Preparation",
-    "Software Development Sprint"
-  ];
-  
-  const descriptions = [
-    "Redesigning the company website to improve user experience and mobile responsiveness.",
-    "Preparing the monthly financial report detailing revenue, expenses, and projections for the upcoming quarter.",
-    "Preparing onboarding materials and scheduling training sessions for new employees.",
-    "Coordinating the launch of our new product line including press releases and promotional events.",
-    "Analyzing survey results from our recent customer satisfaction survey and preparing recommendations.",
-    "Scheduled maintenance of our core systems including database optimization and security updates.",
-    "Planning and executing our Q2 marketing campaign across social media and email channels.",
-    "Conducting a comprehensive inventory audit to reconcile physical stock with database records.",
-    "Preparing presentation materials and agenda for the upcoming client meeting.",
-    "Working on the current development sprint, implementing new features and fixing bugs."
-  ];
-  
-  const remarks = [
-    "Completed ahead of schedule",
-    "Waiting for additional input",
-    "Deadline extended by one week",
-    "Need to follow up with team",
-    "On track for timely completion",
-    "Requires additional resources",
-    "Successful outcome, positive feedback",
-    "Delayed due to unforeseen complications",
-    "Additional requirements added mid-project",
-    "Working with external vendor on this task"
-  ];
-
-  const fileNames = [
-    ["project_plan.pdf", "timeline.xlsx", "team_assignments.docx"],
-    ["meeting_notes.docx", "action_items.pdf"],
-    ["financial_report.xlsx", "budget_forecast.xlsx", "expense_analysis.pdf"],
-    ["presentation.pptx", "demo_script.docx"],
-    ["requirements.txt"],
-    ["data_analysis.csv", "results_summary.pdf"],
-    ["design_mockup.png", "style_guide.pdf", "logo_variants.zip"],
-    ["client_feedback.pdf"],
-    [], // Some entries won't have files
-    ["code_review.md", "bug_report.xlsx", "release_notes.pdf"]
-  ];
-  
-  // Generate 50 dummy logs
-  for (let i = 0; i < 50; i++) {
-    const randomDate = new Date();
-    randomDate.setDate(randomDate.getDate() - Math.floor(Math.random() * 30)); // Random date in the last 30 days
-    
-    const hasFiles = Math.random() > 0.3; // 70% chance of having files
-    const fileSet = hasFiles ? fileNames[Math.floor(Math.random() * fileNames.length)] : [];
-    
-    // Create file entries with URLs
-    const files = fileSet.map(fileName => ({
-      fileName,
-      fileUrl: `/dummy-files/${fileName}`,
-      fileType: getFileType(fileName),
-      fileSize: Math.floor(Math.random() * 5000) + 10 // Random size between 10KB and 5MB
-    }));
-    
-    dummyData.push({
-      id: `dummy-${i + 1}`,
-      date: randomDate.toISOString(),
-      task: tasks[Math.floor(Math.random() * tasks.length)],
-      description: descriptions[Math.floor(Math.random() * descriptions.length)],
-      status: statuses[Math.floor(Math.random() * statuses.length)],
-      department: DEPARTMENTS[Math.floor(Math.random() * DEPARTMENTS.length)],
-      remark: remarks[Math.floor(Math.random() * remarks.length)],
-      files: files
-    });
-  }
-  
-  // Sort by date, most recent first
-  return dummyData.sort((a, b) => new Date(b.date) - new Date(a.date));
-};
-
 // Helper function to determine file type based on extension
 const getFileType = (fileName) => {
   if (!fileName) return null;
@@ -211,8 +112,23 @@ export default function ReportLogsPage() {
   const [filteredLogs, setFilteredLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const fileInputRef = useRef(null);
   const editFileInputRef = useRef(null);
+  
+  // Static departments list
+  const DEPARTMENTS = [
+    "Electronic Unit",
+    "Moulding Unit",
+    "GIS",
+    "Payload",
+    "3D & CNC",
+    "Health & Safety",
+    "Pilots"
+  ];
+  
+  // Department states - no need for loading state
+  const [departments] = useState(DEPARTMENTS);
   
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
@@ -236,7 +152,7 @@ export default function ReportLogsPage() {
     task: "",
     description: "",
     status: "pending",
-    department: DEPARTMENTS[0],
+    department: DEPARTMENTS[0], // Initialize with first department
     remark: "",
     files: []
   });
@@ -253,9 +169,15 @@ export default function ReportLogsPage() {
   const [logToDelete, setLogToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Fetch logs when component mounts
+  // Fetch logs and departments when component mounts
   useEffect(() => {
-    fetchLogs();
+    const initializeData = async () => {
+      if (token) {
+        await fetchLogs();
+      }
+    };
+    
+    initializeData();
   }, [token]);
 
   // Apply filters when any filter changes
@@ -265,6 +187,8 @@ export default function ReportLogsPage() {
 
   const fetchLogs = async () => {
     setIsLoading(true);
+    setError("");
+    
     try {
       // Prepare filter parameters
       const params = {};
@@ -281,32 +205,72 @@ export default function ReportLogsPage() {
         params.status = statusFilter;
       }
       
+      if (departmentFilter !== "all") {
+        params.department = departmentFilter;
+      }
+      
+      if (searchTerm) {
+        params.search = searchTerm;
+      }
+      
+      // Log the request parameters for debugging
+      console.log("Fetching logs with params:", params);
+      
       try {
-        const logsData = await getReportLogs(params);
-        if (Array.isArray(logsData) && logsData.length > 0) {
-          setLogs(logsData);
-          setFilteredLogs(logsData);
+        const response = await getReportLogs(params);
+        
+        // Log the actual response for debugging
+        console.log("API Response type:", typeof response);
+        console.log("API Response:", response);
+        
+        // Super robust handling of any response format
+        let logsData = [];
+        
+        if (Array.isArray(response)) {
+          // Direct array response
+          console.log("Processing array response");
+          logsData = response;
+        } else if (response && typeof response === 'object') {
+          if (Array.isArray(response.logs)) {
+            // Object with logs array
+            console.log("Processing object with logs array");
+            logsData = response.logs;
+          } else {
+            // Try to convert object to array if possible
+            console.log("Attempting to convert object to array");
+            const possibleArray = Object.values(response).find(val => Array.isArray(val));
+            if (possibleArray) {
+              logsData = possibleArray;
+            } else {
+              // Last resort - check if the object itself looks like a log
+              if (response.id && response.task) {
+                logsData = [response];
+              } else {
+                throw new Error("Could not extract logs data from response");
+              }
+            }
+          }
         } else {
-          // If API returns empty or invalid data, use dummy data
-          const dummyLogs = generateDummyLogs();
-          setLogs(dummyLogs);
-          setFilteredLogs(dummyLogs);
+          throw new Error("Unexpected response format: " + (typeof response));
+        }
+        
+        // At this point logsData should be an array
+        console.log("Extracted logs data:", logsData);
+        setLogs(logsData);
+        setFilteredLogs(logsData);
+        
+        if (logsData.length === 0) {
+          setError("No log entries found for the selected filters.");
         }
       } catch (apiError) {
-        console.error("API Error, using dummy data:", apiError);
-        // If API fails, use dummy data
-        const dummyLogs = generateDummyLogs();
-        setLogs(dummyLogs);
-        setFilteredLogs(dummyLogs);
+        console.error("API Error:", apiError);
+        throw apiError;
       }
-      setError("");
     } catch (err) {
       console.error("Error fetching logs:", err);
-      setError(err.message || "Failed to load logs. Using sample data instead.");
-      // Use dummy data as fallback
-      const dummyLogs = generateDummyLogs();
-      setLogs(dummyLogs);
-      setFilteredLogs(dummyLogs);
+      setError(err.message || "Failed to load logs. Please try again later.");
+      setLogs([]);
+      setFilteredLogs([]);
     } finally {
       setIsLoading(false);
     }
@@ -356,50 +320,37 @@ export default function ReportLogsPage() {
     setFilteredLogs(logs);
   };
   
-  const exportToCSV = () => {
-    if (filteredLogs.length === 0) return;
+  const exportToCSV = async () => {
+    setIsLoading(true);
     
     try {
-      // Create CSV header row
-      const headers = ["Date", "Department", "Task", "Description", "Status Check", "Remark"];
+      // Prepare filter parameters
+      const params = {};
       
-      // Helper function to escape field values properly for CSV
-      const escapeCSV = (field) => {
-        if (field === null || field === undefined) return '""';
-        // Convert to string and replace any double quotes with two double quotes
-        const escaped = String(field).replace(/"/g, '""');
-        // Wrap in quotes to handle commas and other special characters
-        return `"${escaped}"`;
-      };
+      if (startDate) {
+        params.startDate = startDate.toISOString();
+      }
       
-      // Format date without commas for better Excel compatibility
-      const formatDateForCSV = (dateString) => {
-        try {
-          const date = new Date(dateString);
-          return date.toISOString().split('T')[0]; // YYYY-MM-DD format
-        } catch (e) {
-          return dateString || "";
-        }
-      };
+      if (endDate) {
+        params.endDate = endDate.toISOString();
+      }
       
-      // Create CSV data rows with proper escaping
-      const data = filteredLogs.map(log => [
-        escapeCSV(formatDateForCSV(log.date)),
-        escapeCSV(log.department || "Unassigned"),
-        escapeCSV(log.task || ""),
-        escapeCSV(log.description || ""),
-        escapeCSV(log.status || ""),
-        escapeCSV(log.remark || "")
-      ]);
+      if (statusFilter !== "all") {
+        params.status = statusFilter;
+      }
       
-      // Combine header and data (also escape headers)
-      const csvContent = [
-        headers.map(escapeCSV).join(","),
-        ...data.map(row => row.join(","))
-      ].join("\n");
+      if (departmentFilter !== "all") {
+        params.department = departmentFilter;
+      }
+      
+      if (searchTerm) {
+        params.search = searchTerm;
+      }
+      
+      // Call the API to get CSV data
+      const blob = await exportReportLogsToCSV(params);
       
       // Create download link
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
@@ -409,8 +360,10 @@ export default function ReportLogsPage() {
       link.click();
       document.body.removeChild(link);
     } catch (err) {
-      console.error("Error exporting to CSV:", err);
-      setError("Failed to export data. Please try again.");
+      console.error("Error exporting CSV:", err);
+      setError("Failed to export CSV. Please try again later.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -460,32 +413,73 @@ export default function ReportLogsPage() {
     }));
   };
 
-  // Simulate uploading multiple files to server
-  const uploadFiles = async (files) => {
-    // In a real application, you would upload the files to a server
-    // and get URLs back. This is a simulation.
-    return Promise.all(
-      files.map(file => {
-        return new Promise((resolve) => {
-          // Simulate network delay
-          setTimeout(() => {
-            // Create a blob URL for demo purposes
-            // In a real app, this would be a URL from your server/storage
-            const fileUrl = URL.createObjectURL(file);
-            resolve({
-              fileName: file.name,
-              fileUrl: fileUrl,
-              fileType: getFileType(file.name),
-              fileSize: file.size
-            });
-          }, 500);
-        });
-      })
-    );
+  // Handle immediate file deletion
+  const handleDeleteFile = async (fileId, fileName) => {
+    try {
+      console.log(`Deleting file ${fileId} (${fileName}) using endpoint: /api/reports/logs/files/${fileId}`);
+      await deleteReportLogFile(fileId);
+      
+      // Update the UI to remove the file
+      setEditLog(prev => ({
+        ...prev,
+        files: prev.files.filter(file => file.id !== fileId)
+      }));
+      
+      // Show success message
+      setSuccess(`File "${fileName}" was successfully deleted.`);
+      
+      return true;
+    } catch (error) {
+      console.error(`Error deleting file ${fileId}:`, error);
+      setError(`Failed to delete file: ${error.message || "Unknown error"}`);
+      return false;
+    }
+  };
+
+  // Upload files to the server and attach them to a log
+  const uploadFiles = async (files, logId) => {
+    if (!files.length || !logId) return [];
+    
+    const formData = new FormData();
+    // No need to append logId to formData anymore as it's passed as a query parameter
+    
+    // Append each file to the FormData using the standardized "files" field name
+    files.forEach(file => {
+      formData.append('files', file);
+    });
+    
+    console.log(`Preparing to upload ${files.length} files for log ID: ${logId} to endpoint: /api/reports/logs/files?logId=${logId}`);
+    
+    // Upload the files to the server using the updated endpoint
+    try {
+      // Show more detailed information for debugging
+      console.log(`Starting file upload for log ${logId} with ${files.length} files`);
+      
+      const result = await uploadReportLogFiles(logId, formData);
+      
+      console.log(`File upload successful for log ${logId}:`, result);
+      
+      if (!result.files || result.files.length === 0) {
+        console.warn(`Server responded with success but no files were returned for log ${logId}`);
+      }
+      
+      return result.files || [];
+    } catch (error) {
+      console.error(`Error uploading files for log ${logId}:`, error);
+      
+      // Enhanced error message with more context
+      const errorMessage = error.data?.message || error.message || "Unknown upload error";
+      console.error(`Upload error details: ${errorMessage}`);
+      
+      // Rethrow with improved error message
+      const enhancedError = new Error(`Failed to upload files: ${errorMessage}`);
+      enhancedError.originalError = error;
+      throw enhancedError;
+    }
   };
 
   // Open file viewer dialog
-  const openFileViewer = (files, taskName) => {
+  const openFileViewer = (files, taskName, logId) => {
     setSelectedFiles(files);
     setSelectedLogTitle(taskName);
     setIsFileDialogOpen(true);
@@ -512,6 +506,8 @@ export default function ReportLogsPage() {
   const handleAddLog = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setError(""); // Clear any previous errors
+    setSuccess(""); // Clear any previous success messages
     
     try {
       // Format the log data for API
@@ -522,33 +518,29 @@ export default function ReportLogsPage() {
           : new Date().toISOString()
       };
       
-      // Upload files if any are selected
+      // Create the log without files first
+      console.log("Creating new report log:", formattedLog);
+      const createdLog = await createReportLog(formattedLog);
+      console.log("Log created successfully:", createdLog);
+      
+      // Upload files if any are selected and attach them to the created log
       if (selectedUploadFiles.length > 0) {
         try {
-          const uploadedFiles = await uploadFiles(selectedUploadFiles);
-          formattedLog.files = uploadedFiles;
+          console.log(`Uploading ${selectedUploadFiles.length} files for log ID: ${createdLog.id} using separate endpoint`);
+          const uploadedFiles = await uploadFiles(selectedUploadFiles, createdLog.id);
+          console.log("Files uploaded successfully:", uploadedFiles);
+          setSuccess(`Log created successfully with ${uploadedFiles.length} files attached.`);
         } catch (fileError) {
           console.error("Error uploading files:", fileError);
+          setError(`Log created but files could not be uploaded: ${fileError.message || "Unknown error"}`);
+          // Continue with the process despite file upload error
         }
+      } else {
+        setSuccess("Log added successfully!");
       }
       
-      // Call API to create the log
-      try {
-        const createdLog = await createReportLog(formattedLog);
-        
-        // Add the new log to our state
-        setLogs(prevLogs => [createdLog, ...prevLogs]);
-        setFilteredLogs(prevFilteredLogs => [createdLog, ...prevFilteredLogs]);
-      } catch (apiError) {
-        console.error("API error when creating log:", apiError);
-        // If API fails, still add to local state for demo purposes
-        const localLog = {
-          ...formattedLog,
-          id: Date.now().toString() // Generate a temporary ID
-        };
-        setLogs(prevLogs => [localLog, ...prevLogs]);
-        setFilteredLogs(prevFilteredLogs => [localLog, ...prevFilteredLogs]);
-      }
+      // Refresh logs to include the new one
+      await fetchLogs();
       
       // Reset form and close dialog
       setNewLog({
@@ -560,12 +552,13 @@ export default function ReportLogsPage() {
         remark: "",
         files: []
       });
+      setSelectedUploadFiles([]);
       resetFileInput();
       setIsAddDialogOpen(false);
-      
     } catch (err) {
       console.error("Error adding log:", err);
       setError(err.message || "Failed to add log. Please try again.");
+      setSuccess(""); // Clear success message on error
     } finally {
       setIsSubmitting(false);
     }
@@ -575,6 +568,8 @@ export default function ReportLogsPage() {
   const handleUpdateLog = async (e) => {
     e.preventDefault();
     setIsEditing(true);
+    setError(""); // Clear any previous errors
+    setSuccess(""); // Clear any previous success messages
     
     try {
       // Format the log data for API
@@ -585,59 +580,91 @@ export default function ReportLogsPage() {
           : new Date().toISOString()
       };
       
-      // Upload new files if any are selected
+      // Update the log first
+      console.log("Updating report log:", formattedLog);
+      const updatedLog = await updateReportLog(editLog.id, formattedLog);
+      console.log("Log updated successfully:", updatedLog);
+      
+      // Handle file removals if any
+      let fileDeleteResults = { success: 0, failed: 0 };
+      
+      if (filesToRemove.length > 0) {
+        console.log(`Removing ${filesToRemove.length} files using endpoint: /api/reports/logs/files/{fileId}`);
+        
+        // Process files sequentially for better error handling
+        for (const fileId of filesToRemove) {
+          try {
+            console.log(`Deleting file ${fileId} using endpoint: /api/reports/logs/files/${fileId}`);
+            await deleteReportLogFile(fileId);
+            fileDeleteResults.success++;
+          } catch (err) {
+            console.error(`Error deleting file ${fileId}:`, err);
+            fileDeleteResults.failed++;
+          }
+        }
+        
+        console.log(`File deletion results: ${fileDeleteResults.success} successful, ${fileDeleteResults.failed} failed`);
+      }
+      
+      // Upload new files if any are selected using the separate endpoint
       if (selectedEditFiles.length > 0) {
         try {
-          const uploadedFiles = await uploadFiles(selectedEditFiles);
-          formattedLog.files = [...(formattedLog.files || []), ...uploadedFiles];
+          console.log(`Uploading ${selectedEditFiles.length} files for log ID: ${updatedLog.id} using endpoint: /api/reports/logs/files?logId=${updatedLog.id}`);
+          const uploadedFiles = await uploadFiles(selectedEditFiles, updatedLog.id);
+          console.log("Files uploaded successfully:", uploadedFiles);
+          
+          let successMessage = `Log updated successfully with ${uploadedFiles.length} new files added`;
+          
+          if (filesToRemove.length > 0) {
+            successMessage += `, ${fileDeleteResults.success} files removed`;
+            if (fileDeleteResults.failed > 0) {
+              successMessage += ` (${fileDeleteResults.failed} file deletions failed)`;
+            }
+          }
+          
+          setSuccess(successMessage);
         } catch (fileError) {
           console.error("Error uploading files:", fileError);
+          
+          let errorMessage = `Log updated but new files could not be uploaded: ${fileError.message}`;
+          
+          if (filesToRemove.length > 0) {
+            errorMessage += `. ${fileDeleteResults.success} files were removed`;
+            if (fileDeleteResults.failed > 0) {
+              errorMessage += ` (${fileDeleteResults.failed} file deletions failed)`;
+            }
+          }
+          
+          setError(errorMessage);
         }
+      } else if (filesToRemove.length > 0) {
+        let successMessage = `Log updated successfully`;
+        
+        if (fileDeleteResults.success > 0) {
+          successMessage += ` with ${fileDeleteResults.success} files removed`;
+        }
+        
+        if (fileDeleteResults.failed > 0) {
+          successMessage += ` (${fileDeleteResults.failed} file deletions failed)`;
+        }
+        
+        setSuccess(successMessage);
+      } else {
+        setSuccess("Log updated successfully!");
       }
       
-      // Add filesToRemove to the request if any
-      if (filesToRemove.length > 0) {
-        formattedLog.filesToRemove = filesToRemove;
-      }
-      
-      // Call API to update the log
-      try {
-        const updatedLog = await updateReportLog(editLog.id, formattedLog);
-        
-        // Update the log in our state
-        setLogs(prevLogs => prevLogs.map(log => 
-          log.id === updatedLog.id ? updatedLog : log
-        ));
-        
-        setFilteredLogs(prevLogs => prevLogs.map(log => 
-          log.id === updatedLog.id ? updatedLog : log
-        ));
-      } catch (apiError) {
-        console.error("API error when updating log:", apiError);
-        // If API fails, still update in local state for demo purposes
-        const updatedLogLocal = {
-          ...formattedLog,
-          id: editLog.id
-        };
-        
-        setLogs(prevLogs => prevLogs.map(log => 
-          log.id === updatedLogLocal.id ? updatedLogLocal : log
-        ));
-        
-        setFilteredLogs(prevLogs => prevLogs.map(log => 
-          log.id === updatedLogLocal.id ? updatedLogLocal : log
-        ));
-      }
+      // Refresh logs to include the updates
+      await fetchLogs();
       
       // Reset form and close dialog
-      setEditLog(null);
+      setSelectedEditFiles([]);
       setFilesToRemove([]);
       resetEditFileInput();
       setIsEditDialogOpen(false);
-      
     } catch (err) {
       console.error("Error updating log:", err);
       setError(err.message || "Failed to update log. Please try again.");
+      setSuccess(""); // Clear success message on error
     } finally {
       setIsEditing(false);
     }
@@ -651,23 +678,14 @@ export default function ReportLogsPage() {
     
     try {
       // Call API to delete the log
-      try {
-        await deleteReportLog(logToDelete.id);
-        
-        // Remove the log from our state
-        setLogs(prevLogs => prevLogs.filter(log => log.id !== logToDelete.id));
-        setFilteredLogs(prevLogs => prevLogs.filter(log => log.id !== logToDelete.id));
-      } catch (apiError) {
-        console.error("API error when deleting log:", apiError);
-        // If API fails, still remove from local state for demo purposes
-        setLogs(prevLogs => prevLogs.filter(log => log.id !== logToDelete.id));
-        setFilteredLogs(prevLogs => prevLogs.filter(log => log.id !== logToDelete.id));
-      }
+      await deleteReportLog(logToDelete.id);
       
-      // Reset and close dialog
-      setLogToDelete(null);
+      // Refresh logs to reflect the deletion
+      await fetchLogs();
+      
+      // Close the dialog
       setIsDeleteDialogOpen(false);
-      
+      setLogToDelete(null);
     } catch (err) {
       console.error("Error deleting log:", err);
       setError(err.message || "Failed to delete log. Please try again.");
@@ -676,33 +694,116 @@ export default function ReportLogsPage() {
     }
   };
 
-  const handleDownloadFile = (fileUrl, fileName) => {
-    // For demo files with dummy paths, create and download a sample file
-    if (fileUrl.startsWith('/dummy-files/')) {
-      // Create a sample file with content
-      const fileExtension = fileName.split('.').pop().toLowerCase();
-      let fileContent = 'This is a sample file for demonstration purposes.\n';
-      fileContent += `Filename: ${fileName}\n`;
-      fileContent += `Generated on: ${new Date().toLocaleString()}\n`;
-
-      // Create a blob with the content
-      const blob = new Blob([fileContent], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
+  const handleDownloadFile = async (fileUrl, fileName) => {
+    if (!fileUrl) {
+      console.error("No file URL provided");
+      setError("File URL is missing. Cannot download the file.");
+      return;
+    }
+    
+    try {
+      // Handle relative URLs by prepending the API base URL
+      let fullUrl = fileUrl;
+      if (fileUrl.startsWith('/')) {
+        // This is a relative URL, prepend the API base URL
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+        
+        // Remove /api prefix if it's already in the fileUrl to avoid duplication
+        const pathWithoutApi = fileUrl.startsWith('/api/') ? fileUrl.substring(4) : fileUrl;
+        
+        // Make sure we don't have double slashes
+        fullUrl = `${API_BASE_URL.replace(/\/$/, '')}${pathWithoutApi}`;
+      }
       
-      // Create download link
+      console.log(`Downloading file: ${fileName} from URL: ${fullUrl}`);
+      
+      // Set a temporary loading message
+      setSuccess(`Downloading file: ${fileName}...`);
+      
+      // Use fetch to get the file as a blob
+      const authHeaders = {};
+      if (token) {
+        authHeaders.Authorization = `Bearer ${token}`;
+      }
+      
+      // Fetch the file with authentication
+      const response = await fetch(fullUrl, {
+        method: 'GET',
+        headers: authHeaders,
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
+      }
+      
+      // Convert the response to a blob
+      const blob = await response.blob();
+      
+      // Create a local URL for the blob
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // Create a link and trigger download
       const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
+      link.href = blobUrl;
+      link.download = fileName || 'download';
+      
+      // For most browsers, we need to append the link to the DOM
       document.body.appendChild(link);
       link.click();
       
       // Clean up
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } else {
-      // For real files with valid URLs, just navigate to the URL
-      window.open(fileUrl, '_blank');
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl); // Release the blob URL
+      }, 100);
+      
+      setSuccess(`Successfully downloaded: ${fileName}`);
+      
+      return true;
+    } catch (err) {
+      console.error("Error downloading file:", err);
+      setError(`Failed to download file: ${err.message || "Unknown error"}`);
+      return false;
     }
+  };
+
+  // Handle PDF files specially - open in new tab for preview if possible
+  const handlePdfFile = (fileUrl, fileName) => {
+    if (!fileUrl) {
+      console.error("No file URL provided");
+      setError("File URL is missing. Cannot open the PDF.");
+      return;
+    }
+    
+    try {
+      // Handle relative URLs by prepending the API base URL
+      let fullUrl = fileUrl;
+      if (fileUrl.startsWith('/')) {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+        const pathWithoutApi = fileUrl.startsWith('/api/') ? fileUrl.substring(4) : fileUrl;
+        fullUrl = `${API_BASE_URL.replace(/\/$/, '')}${pathWithoutApi}`;
+      }
+      
+      // Open PDF in a new tab
+      window.open(fullUrl, '_blank');
+      setSuccess(`Opening PDF: ${fileName} in a new tab`);
+    } catch (err) {
+      console.error("Error opening PDF:", err);
+      setError(`Failed to open PDF: ${err.message || "Unknown error"}`);
+      
+      // Fallback to regular download if opening fails
+      handleDownloadFile(fileUrl, fileName).catch(error => {
+        console.error("Fallback download also failed:", error);
+      });
+    }
+  };
+
+  // Helper to check if a file is a PDF based on name or type
+  const isPdfFile = (file) => {
+    return (
+      (file.fileName && file.fileName.toLowerCase().endsWith('.pdf')) || 
+      (file.fileType && file.fileType.toLowerCase() === 'application/pdf')
+    );
   };
 
   // Helper to format file size
@@ -710,6 +811,39 @@ export default function ReportLogsPage() {
     if (bytes < 1024) return bytes + ' bytes';
     else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
     else return (bytes / 1048576).toFixed(1) + ' MB';
+  };
+
+  // Handle file deletion from the file viewer
+  const handleFileViewerDelete = async (fileId, fileName) => {
+    try {
+      console.log(`Deleting file ${fileId} (${fileName}) from file viewer`);
+      await deleteReportLogFile(fileId);
+      
+      // Update the selected files list to remove the deleted file
+      setSelectedFiles(prev => prev.filter(file => file.id !== fileId));
+      
+      // Show success message
+      setSuccess(`File "${fileName}" was successfully deleted.`);
+      
+      // Also update the logs data to reflect the deletion
+      setLogs(prevLogs => 
+        prevLogs.map(log => {
+          if (log.files && Array.isArray(log.files)) {
+            return {
+              ...log,
+              files: log.files.filter(file => file.id !== fileId)
+            };
+          }
+          return log;
+        })
+      );
+      
+      return true;
+    } catch (error) {
+      console.error(`Error deleting file ${fileId}:`, error);
+      setError(`Failed to delete file: ${error.message || "Unknown error"}`);
+      return false;
+    }
   };
 
   // Loading state
@@ -727,7 +861,7 @@ export default function ReportLogsPage() {
   return (
     <AdminLayout>
       <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-8">
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Report Logs</h2>
             <p className="text-muted-foreground mt-1">
@@ -735,7 +869,7 @@ export default function ReportLogsPage() {
             </p>
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex gap-2 justst">
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="flex items-center gap-2">
@@ -743,7 +877,7 @@ export default function ReportLogsPage() {
                   Add New Log
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[550px]">
+              <DialogContent className="sm:max-w-[550px] w-[95vw] max-w-full">
                 <DialogHeader>
                   <DialogTitle>Add New Report Log</DialogTitle>
                   <DialogDescription>
@@ -786,7 +920,7 @@ export default function ReportLogsPage() {
                           <SelectValue placeholder="Select department" />
                         </SelectTrigger>
                         <SelectContent>
-                          {DEPARTMENTS.map((dept) => (
+                          {departments.map((dept) => (
                             <SelectItem key={dept} value={dept}>
                               {dept}
                             </SelectItem>
@@ -896,12 +1030,21 @@ export default function ReportLogsPage() {
                     </div>
                   </div>
                   
-                  <DialogFooter>
+                  <DialogFooter className="flex-col sm:flex-row gap-2">
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => {
                         setIsAddDialogOpen(false);
+                        setNewLog({
+                          date: new Date(),
+                          task: "",
+                          description: "",
+                          status: "pending",
+                          department: DEPARTMENTS[0],
+                          remark: "",
+                          files: []
+                        });
                         resetFileInput();
                       }}
                     >
@@ -941,6 +1084,13 @@ export default function ReportLogsPage() {
           </Alert>
         )}
 
+        {success && (
+          <Alert variant="success" className="bg-green-50 text-green-800 border-green-200">
+            <AlertCircle className="h-4 w-4 text-green-500" />
+            <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        )}
+
         {/* Filters */}
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative flex-1">
@@ -955,7 +1105,7 @@ export default function ReportLogsPage() {
           
           <div className="flex flex-wrap gap-2">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[180px] max-w-full">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -968,12 +1118,12 @@ export default function ReportLogsPage() {
             </Select>
             
             <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[180px] max-w-full">
                 <SelectValue placeholder="Department" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
-                {DEPARTMENTS.map((dept) => (
+                {departments.map((dept) => (
                   <SelectItem key={dept} value={dept}>
                     {dept}
                   </SelectItem>
@@ -1030,7 +1180,7 @@ export default function ReportLogsPage() {
               className="flex items-center gap-2"
             >
               <Filter className="h-4 w-4" />
-              Reset Filters
+              <span className="md:inline hidden">Reset Filters</span>
             </Button>
           </div>
         </div>
@@ -1043,12 +1193,12 @@ export default function ReportLogsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[120px]">Date</TableHead>
-                    <TableHead className="w-[150px]">Department</TableHead>
+                    <TableHead className="w-[150px] hidden md:table-cell">Department</TableHead>
                     <TableHead className="w-[200px]">Task</TableHead>
-                    <TableHead className="w-[350px]">Description</TableHead>
-                    <TableHead className="w-[130px]">Status Check</TableHead>
-                    <TableHead className="w-[150px]">Remark</TableHead>
-                    <TableHead className="w-[120px]">Attachments</TableHead>
+                    <TableHead className="w-[350px] hidden md:table-cell">Description</TableHead>
+                    <TableHead className="w-[130px]">Status</TableHead>
+                    <TableHead className="w-[150px] hidden md:table-cell">Remark</TableHead>
+                    <TableHead className="w-[120px] hidden sm:table-cell">Files</TableHead>
                     <TableHead className="w-[80px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1067,26 +1217,26 @@ export default function ReportLogsPage() {
                         <TableCell className="font-medium">
                           {formatDate(log.date)}
                         </TableCell>
-                        <TableCell>{log.department || "Unassigned"}</TableCell>
+                        <TableCell className="hidden md:table-cell">{log.department || "Unassigned"}</TableCell>
                         <TableCell className="font-medium">
                           {log.task}
                         </TableCell>
-                        <TableCell className="max-w-[350px] whitespace-normal">
+                        <TableCell className="max-w-[350px] whitespace-normal hidden md:table-cell">
                           {log.description}
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={log.status} />
                         </TableCell>
-                        <TableCell className="max-w-[150px] whitespace-normal">
+                        <TableCell className="max-w-[150px] whitespace-normal hidden md:table-cell">
                           {log.remark}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           {log.files && log.files.length > 0 ? (
                             <Button 
                               variant="ghost" 
                               size="sm" 
                               className="flex items-center gap-1"
-                              onClick={() => openFileViewer(log.files, log.task)}
+                              onClick={() => openFileViewer(log.files, log.task, log.id)}
                             >
                               <Paperclip className="h-4 w-4" />
                               <span className="mx-1">{log.files.length}</span>
@@ -1116,6 +1266,31 @@ export default function ReportLogsPage() {
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Delete
                               </DropdownMenuItem>
+                              {/* Add view details option for mobile */}
+                              <DropdownMenuItem 
+                                className="md:hidden"
+                                onClick={() => {
+                                  // Open a details dialog that shows the fields hidden on mobile
+                                  alert(`
+Department: ${log.department || "Unassigned"}
+Description: ${log.description}
+Remark: ${log.remark || "None"}
+                                  `);
+                                }}
+                              >
+                                <FileText className="h-4 w-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
+                              {/* Add files view option on mobile */}
+                              {log.files && log.files.length > 0 && (
+                                <DropdownMenuItem 
+                                  className="sm:hidden"
+                                  onClick={() => openFileViewer(log.files, log.task, log.id)}
+                                >
+                                  <Paperclip className="h-4 w-4 mr-2" />
+                                  View Files ({log.files.length})
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -1130,7 +1305,7 @@ export default function ReportLogsPage() {
         
         {/* Edit Log Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="sm:max-w-[550px]">
+          <DialogContent className="sm:max-w-[550px] w-[95vw] max-w-full">
             <DialogHeader>
               <DialogTitle>Edit Report Log</DialogTitle>
               <DialogDescription>
@@ -1175,7 +1350,7 @@ export default function ReportLogsPage() {
                         <SelectValue placeholder="Select department" />
                       </SelectTrigger>
                       <SelectContent>
-                        {DEPARTMENTS.map((dept) => (
+                        {departments.map((dept) => (
                           <SelectItem key={dept} value={dept}>
                             {dept}
                           </SelectItem>
@@ -1249,18 +1424,78 @@ export default function ReportLogsPage() {
                                 ({formatFileSize(file.fileSize)})
                               </span>
                             </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={() => markFileForRemoval(file.id)}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                  >
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem 
+                                    onClick={() => markFileForRemoval(file.id)}
+                                    className="text-orange-600"
+                                  >
+                                    <X className="h-4 w-4 mr-2" />
+                                    Mark for Deletion
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={() => handleDeleteFile(file.id, file.fileName)}
+                                    className="text-red-600"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete Now
+                                  </DropdownMenuItem>
+                                  {isPdfFile(file) && file.fileUrl && (
+                                    <DropdownMenuItem 
+                                      onClick={() => handlePdfFile(file.fileUrl, file.fileName)}
+                                      className="text-blue-600"
+                                    >
+                                      <FileText className="h-4 w-4 mr-2" />
+                                      View PDF
+                                    </DropdownMenuItem>
+                                  )}
+                                  {file.fileUrl && (
+                                    <DropdownMenuItem 
+                                      onClick={() => {
+                                        // Need to handle the async function properly
+                                        handleDownloadFile(file.fileUrl, file.fileName)
+                                          .catch(error => {
+                                            console.error(`Error initiating download for ${file.fileName}:`, error);
+                                            setError(`Failed to start download for ${file.fileName}: ${error.message || "Unknown error"}`);
+                                          });
+                                      }}
+                                    >
+                                      <DownloadCloud className="h-4 w-4 mr-2" />
+                                      Download
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => markFileForRemoval(file.id)}
+                                title="Mark for removal when saving"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
+                      {filesToRemove.length > 0 && (
+                        <p className="text-xs text-amber-600">
+                          {filesToRemove.length} file{filesToRemove.length > 1 ? 's' : ''} marked for deletion when you save changes
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -1315,7 +1550,7 @@ export default function ReportLogsPage() {
                   </div>
                 </div>
                 
-                <DialogFooter>
+                <DialogFooter className="flex-col sm:flex-row gap-2">
                   <Button
                     type="button"
                     variant="outline"
@@ -1382,7 +1617,7 @@ export default function ReportLogsPage() {
         
         {/* File Viewer Dialog */}
         <Dialog open={isFileDialogOpen} onOpenChange={setIsFileDialogOpen}>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-[600px] w-[95vw] max-w-full">
             <DialogHeader>
               <DialogTitle>Attachments</DialogTitle>
               <DialogDescription>
@@ -1404,18 +1639,54 @@ export default function ReportLogsPage() {
                         </div>
                         <div>
                           <p className="font-medium">{file.fileName}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {formatFileSize(file.fileSize)}
-                          </p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span>{formatFileSize(file.fileSize)}</span>
+                            {file.fileType && (
+                              <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100">
+                                {file.fileType.split('/')[1] || file.fileType}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => handleDownloadFile(file.fileUrl, file.fileName)}
-                      >
-                        <DownloadCloud className="h-5 w-5" />
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {isPdfFile(file) && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            title="View PDF in browser"
+                            onClick={() => handlePdfFile(file.fileUrl, file.fileName)}
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            <FileText className="h-4 w-4 mr-1" />
+                            View
+                          </Button>
+                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          title="Download file"
+                          onClick={() => {
+                            // Need to handle the async function properly
+                            handleDownloadFile(file.fileUrl, file.fileName)
+                              .catch(error => {
+                                console.error(`Error initiating download for ${file.fileName}:`, error);
+                                setError(`Failed to start download for ${file.fileName}: ${error.message || "Unknown error"}`);
+                              });
+                          }}
+                        >
+                          <DownloadCloud className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Delete file"
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleFileViewerDelete(file.id, file.fileName)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1424,20 +1695,45 @@ export default function ReportLogsPage() {
               )}
             </ScrollArea>
             
-            <DialogFooter>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
               <Button variant="outline" onClick={() => setIsFileDialogOpen(false)}>
                 Close
               </Button>
               {selectedFiles.length > 0 && (
                 <Button 
-                  onClick={() => {
-                    // Download all files
-                    selectedFiles.forEach(file => {
-                      handleDownloadFile(file.fileUrl, file.fileName);
-                    });
+                  onClick={async () => {
+                    // Download all files sequentially for better reliability
+                    setSuccess(`Starting download of ${selectedFiles.length} files...`);
+                    
+                    // Track success and failure counts
+                    let successCount = 0;
+                    let failureCount = 0;
+                    
+                    // Process files one at a time
+                    for (const file of selectedFiles) {
+                      try {
+                        // Using await to process files sequentially
+                        const result = await handleDownloadFile(file.fileUrl, file.fileName);
+                        if (result) {
+                          successCount++;
+                        } else {
+                          failureCount++;
+                        }
+                      } catch (error) {
+                        console.error(`Error downloading file ${file.fileName}:`, error);
+                        failureCount++;
+                      }
+                    }
+                    
+                    // Show final results
+                    if (failureCount === 0) {
+                      setSuccess(`Successfully downloaded all ${successCount} files.`);
+                    } else {
+                      setError(`Downloaded ${successCount} files, but ${failureCount} files failed to download.`);
+                    }
                   }}
                 >
-                  Download All
+                  Download All ({selectedFiles.length})
                 </Button>
               )}
             </DialogFooter>

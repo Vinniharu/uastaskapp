@@ -77,7 +77,7 @@ export default function StaffProfile() {
                     <User className="h-12 w-12 text-gray-500" />
                   </div>
                   <h2 className="text-xl font-bold">{profileData.firstName} {profileData.lastName}</h2>
-                  <Badge variant={profileData.role === "admin" ? "destructive" : "success"} className="mt-2">
+                  <Badge variant={profileData.role === "admin" ? "admin" : "staff"} className="mt-2">
                     {profileData.role ? (profileData.role.charAt(0).toUpperCase() + profileData.role.slice(1)) : 'Staff'}
                   </Badge>
                 </div>

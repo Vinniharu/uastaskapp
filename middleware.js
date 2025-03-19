@@ -32,7 +32,7 @@ const adminRoutes = [
   '/admin/create-task',
   '/admin/current-tasks',
   '/admin/task-history',
-  // '/admin/report-logs',
+  '/admin/report-logs',
 ];
 
 // Define routes that should not be accessible when logged in
@@ -126,5 +126,7 @@ export const config = {
   matcher: [
     // Match all routes except static files, api routes, and _next
     '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    // Also match report logs API routes to protect them
+    '/api/reports/logs/:path*',
   ],
 }; 

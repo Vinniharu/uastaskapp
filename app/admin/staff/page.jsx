@@ -594,7 +594,7 @@ export default function StaffManagement() {
                         {staff.firstName} {staff.lastName}
                       </h3>
                       <p className="text-sm text-muted-foreground">{staff.email}</p>
-                      <Badge variant={staff.role === 'admin' ? "default" : "secondary"} className="mt-1 capitalize">
+                      <Badge variant={staff.role === 'admin' ? "admin" : "staff"} className="mt-1 capitalize">
                         {staff.role}
                       </Badge>
                     </div>
@@ -681,11 +681,11 @@ export default function StaffManagement() {
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <h3 className="text-xl font-semibold">
+                    <h2 className="text-xl font-semibold">
                       {selectedStaff.firstName} {selectedStaff.lastName}
-                    </h3>
+                    </h2>
                     <p className="text-muted-foreground">{selectedStaff.email}</p>
-                    <Badge variant={selectedStaff.role === 'admin' ? "default" : "secondary"} className="mt-2 capitalize">
+                    <Badge variant={selectedStaff.role === 'admin' ? "admin" : "staff"} className="mt-2 capitalize">
                       {selectedStaff.role}
                     </Badge>
                   </div>
