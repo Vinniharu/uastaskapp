@@ -1,9 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/app/components/DashboardLayout";
-import { useAuth } from "@/lib/auth";
 import { useAuthCheck } from "@/lib/auth-utils";
 import { getUserProfile } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,8 +10,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, User, Mail, Calendar, Briefcase } from "lucide-react";
 
 export default function StaffProfile() {
-  const { staffInfo } = useAuth();
-  const router = useRouter();
   const [profileData, setProfileData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");

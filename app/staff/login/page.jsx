@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,14 @@ export default function StaffLogin() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [validationErrors, setValidationErrors] = useState({
+    email: "",
+    password: "",
+  });
+  
+  // Refs for form elements
+  const emailInputRef = useRef(null);
+  const passwordInputRef = useRef(null);
 
   // Check for redirect parameter
   const redirectUrl = searchParams.get("redirect") || "";
@@ -77,9 +85,38 @@ export default function StaffLogin() {
     setError("");
     setSuccessMessage("");
     setIsLoading(true);
+    
+    // Reset validation errors
+    setValidationErrors({
+      email: "",
+      password: "",
+    });
+
+    // Validate inputs before making API call
+    let hasErrors = false;
+    
+    if (!formData.email.trim()) {
+      setValidationErrors(prev => ({ ...prev, email: "Email or Staff ID is required" }));
+      hasErrors = true;
+    }
+
+    if (!formData.password) {
+      setValidationErrors(prev => ({ ...prev, password: "Password is required" }));
+      hasErrors = true;
+    }
+    
+    if (hasErrors) {
+      setIsLoading(false);
+      // Focus the first field with an error
+      if (!formData.email.trim() && emailInputRef.current) {
+        emailInputRef.current.focus();
+      } else if (!formData.password && passwordInputRef.current) {
+        passwordInputRef.current.focus();
+      }
+      return;
+    }
 
     try {
-      console.log("Attempting login with identifier:", formData.email);
 
       // Call the API to login
       const response = await apiLoginStaff({
@@ -125,31 +162,77 @@ export default function StaffLogin() {
       console.error("Login error:", err);
 
       // Extract the most useful error message
-      let errorMessage = "Invalid email/staff ID or password. Please try again.";
+      let errorMessage = "An error occurred during login. Please try again.";
+      let isCredentialsError = false;
+      let isEmailError = false;
+      let isPasswordError = false;
 
-      if (err.message) {
-        errorMessage = err.message;
-      } else if (err.data && err.data.message) {
-        errorMessage = err.data.message;
-      }
-
-      // Check for common login errors
-      if (
-        errorMessage.includes("incorrect") ||
-        errorMessage.includes("invalid")
-      ) {
-        errorMessage = "Invalid email/staff ID or password. Please try again.";
-      } else if (errorMessage.includes("not found")) {
-        errorMessage = "Account not found. Please check your credentials or sign up.";
-      } else if (
-        errorMessage.includes("network") ||
-        errorMessage.includes("connect")
-      ) {
-        errorMessage =
-          "Network error. Please check your connection and try again.";
+      // Handle specific API error responses
+      if (err.response) {
+        const statusCode = err.response.status;
+        
+        // Handle common HTTP status codes
+        if (statusCode === 401) {
+          errorMessage = "Invalid email/password combination. Please check your credentials and try again.";
+          isCredentialsError = true;
+          isPasswordError = true; // Assume password error as most common
+        } else if (statusCode === 404) {
+          errorMessage = "Account not found. Please check your email/staff ID or sign up.";
+          isCredentialsError = true;
+          isEmailError = true;
+        } else if (statusCode === 403) {
+          errorMessage = "Your account is locked or disabled. Please contact an administrator.";
+        } else if (statusCode === 429) {
+          errorMessage = "Too many failed attempts. Please try again later.";
+        } else if (err.response.data && err.response.data.message) {
+          errorMessage = err.response.data.message;
+        }
+      } 
+      // Handle network errors
+      else if (err.request) {
+        errorMessage = "Network error. Please check your connection and try again.";
+      } 
+      // Handle specific error messages
+      else if (err.message) {
+        if (err.message.includes("password") && 
+           (err.message.includes("incorrect") || err.message.includes("invalid") || err.message.includes("wrong"))) {
+          errorMessage = "Incorrect password. Please try again.";
+          isCredentialsError = true;
+          isPasswordError = true;
+        } else if (err.message.includes("email") && 
+                  (err.message.includes("not found") || err.message.includes("invalid") || err.message.includes("unknown"))) {
+          errorMessage = "Email or Staff ID not found. Please check your credentials.";
+          isCredentialsError = true;
+          isEmailError = true;
+        } else {
+          errorMessage = err.message;
+        }
       }
 
       setError(errorMessage);
+      
+      // Set validation errors for specific fields
+      if (isEmailError) {
+        setValidationErrors(prev => ({ ...prev, email: "Invalid email or staff ID" }));
+        if (emailInputRef.current) emailInputRef.current.focus();
+      }
+      
+      if (isPasswordError) {
+        setValidationErrors(prev => ({ ...prev, password: "Incorrect password" }));
+        if (passwordInputRef.current) passwordInputRef.current.focus();
+      }
+      
+      // Add shake animation to form if it's a credentials error
+      if (isCredentialsError || errorMessage.includes("password") || errorMessage.includes("email") || 
+          errorMessage.includes("credentials")) {
+        const form = document.querySelector("form");
+        if (form) {
+          form.classList.add("animate-shake");
+          setTimeout(() => {
+            form.classList.remove("animate-shake");
+          }, 500);
+        }
+      }
     } finally {
       setIsLoading(false);
     }
@@ -241,8 +324,12 @@ export default function StaffLogin() {
                 onChange={(e) =>
                   setFormData({ ...formData, email: e.target.value })
                 }
-                className="w-full"
+                className={`w-full ${validationErrors.email ? 'border-red-500 focus:ring-red-500' : ''}`}
+                ref={emailInputRef}
               />
+              {validationErrors.email && (
+                <p className="text-sm text-red-500 mt-1">{validationErrors.email}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -253,12 +340,12 @@ export default function StaffLogin() {
                 >
                   Password
                 </label>
-                {/* <Link
-                  href="#"
+                <Link
+                  href="/staff/reset-password"
                   className="text-xs text-blue-600 hover:underline"
                 >
-                  Forgot your password?
-                </Link> */}
+                  Forgot password?
+                </Link>
               </div>
               <Input
                 id="password"
@@ -269,8 +356,12 @@ export default function StaffLogin() {
                 onChange={(e) =>
                   setFormData({ ...formData, password: e.target.value })
                 }
-                className="w-full"
+                className={`w-full ${validationErrors.password ? 'border-red-500 focus:ring-red-500' : ''}`}
+                ref={passwordInputRef}
               />
+              {validationErrors.password && (
+                <p className="text-sm text-red-500 mt-1">{validationErrors.password}</p>
+              )}
             </div>
 
             <Button

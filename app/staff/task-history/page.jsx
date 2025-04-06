@@ -1,11 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/app/components/DashboardLayout";
 import { useAuth } from "@/lib/auth";
 import { useAuthCheck } from "@/lib/auth-utils";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,17 +16,14 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { 
-  AlertCircle, 
   Search, 
   Calendar, 
   Clock, 
   CheckCircle2, 
-  ArrowUpDown,
-  Filter,
   Eye
 } from "lucide-react";
-import { statusOptions, priorityBadges } from "@/lib/mock-data";
-import { getErrorMessage, handleApiResponse, retryWithBackoff } from "@/lib/error-utils";
+import { priorityBadges } from "@/lib/mock-data";
+import { getErrorMessage } from "@/lib/error-utils";
 import { NetworkStatus } from "@/app/components/NetworkStatus";
 import { DismissibleAlert } from "@/app/components/DismissibleAlert";
 import { CompletedTaskView } from "@/app/components/CompletedTaskView";
@@ -36,7 +31,6 @@ import { getAllTasks } from "@/lib/api";
 
 export default function TaskHistoryPage() {
   const { token } = useAuth();
-  const router = useRouter();
   const [completedTasks, setCompletedTasks] = useState([]);
   const [filteredTasks, setFilteredTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);

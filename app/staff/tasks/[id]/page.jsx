@@ -13,37 +13,22 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   AlertCircle, 
   Calendar, 
-  Clock, 
   ArrowLeft,
   CheckCircle2,
   User,
   CalendarClock,
   AlertTriangle,
   Link as LinkIcon,
-  Paperclip,
-  Send,
-  Trash2,
-  MessageSquare,
-  MessageSquareOff,
-  MoreVertical,
-  Loader2,
-  FileText,
-  Download
 } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
 import { statusOptions, priorityBadges } from "@/lib/mock-data";
 import { getErrorMessage, handleApiResponse, retryWithBackoff } from "@/lib/error-utils";
 import { NetworkStatus } from "@/app/components/NetworkStatus";
 import { DismissibleAlert } from "@/app/components/DismissibleAlert";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { formatDateTime } from "@/lib/utils";
 import { getTaskById } from "@/lib/api";
 
 export default function TaskDetailPage(props) {
@@ -51,16 +36,13 @@ export default function TaskDetailPage(props) {
   const params = React.use(props.params);
   const taskId = params.id;
   
-  const { staffInfo, token } = useAuth();
+  const { token } = useAuth();
   const router = useRouter();
   const [task, setTask] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [includeStatusUpdate, setIncludeStatusUpdate] = useState(false);
-  const [newStatus, setNewStatus] = useState("");
   const fileInputRef = useRef(null);
   
   // Check if user is authenticated

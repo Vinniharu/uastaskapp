@@ -82,8 +82,6 @@ export default function TasksPage() {
   const fetchTasks = async () => {
     setIsLoading(true);
     try {
-      console.log("Fetching tasks with token:", token ? "Token exists" : "No token");
-      
       const tasksData = await getAllTasks();
       
       // Ensure data is an array
@@ -91,7 +89,6 @@ export default function TasksPage() {
       setTasks(tasksArray);
       setError("");
     } catch (err) {
-      console.error("Error fetching tasks:", err);
       setError(getErrorMessage(err, "loading tasks"));
     } finally {
       setIsLoading(false);

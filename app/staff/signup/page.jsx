@@ -544,7 +544,7 @@ export default function StaffSignup() {
                       Upload Photo
                     </Button>
                     
-                    <Button
+                    {/*<Button
                       type="button"
                       onClick={startCamera}
                       variant="outline"
@@ -553,7 +553,7 @@ export default function StaffSignup() {
                     >
                       <Camera size={16} />
                       Take Photo
-                    </Button>
+                    </Button>*/}
                   </div>
                 )}
               </div>
