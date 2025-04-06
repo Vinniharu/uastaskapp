@@ -554,6 +554,7 @@ export default function StaffSignup() {
                       <Camera size={16} />
                       Take Photo
                     </Button>*/}
+                    
                   </div>
                 )}
               </div>
