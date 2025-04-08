@@ -43,6 +43,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { DEPARTMENTS } from "@/data/department";
 
 // Fallback date formatter in case date-fns has issues
 const formatDate = (dateString) => {
@@ -114,19 +115,7 @@ export default function ReportLogsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const fileInputRef = useRef(null);
-  const editFileInputRef = useRef(null);
-  
-  // Static departments list
-  const DEPARTMENTS = [
-    "Electronic Unit",
-    "Production Unit",
-    "Moulding Unit",
-    "GIS",
-    "Payload",
-    "3D & CNC",
-    "Health & Safety",
-    "Pilots",
-  ];
+  const editFileInputRef = useRef(null)
   
   // Department states - no need for loading state
   const [departments] = useState(DEPARTMENTS);

@@ -56,7 +56,6 @@ import {
   updateStaff,
   deleteStaff,
   fetchStaffProfileImage,
-  getStaffProfileImageUrl,
 } from "@/lib/api";
 import ReactCrop, { centerCrop, makeAspectCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
@@ -70,6 +69,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { DEPARTMENTS } from "@/data/department";
 
 export default function StaffManagement() {
   const [staffData, setStaffData] = useState([]);
@@ -115,17 +115,6 @@ export default function StaffManagement() {
   const [selectedStaffImage, setSelectedStaffImage] = useState("");
   const [staffImages, setStaffImages] = useState({});
 
-  // Add this after the useState declarations at the top
-  const departmentOptions = [
-    "Electronic Unit",
-    "Production Unit",
-    "Moulding Unit",
-    "GIS",
-    "Payload",
-    "3D & CNC",
-    "Health & Safety",
-    "Pilots",
-  ];;
 
   // Check if user is authenticated, redirect to login if not
   // For admin routes, redirect to admin login
@@ -795,7 +784,7 @@ export default function StaffManagement() {
                       <span>{newStaffData.department || "Select Department"}</span>
                     </SelectTrigger>
                     <SelectContent>
-                      {departmentOptions.map((dept) => (
+                      {DEPARTMENTS.map((dept) => (
                         <SelectItem key={dept} value={dept}>
                           {dept}
                         </SelectItem>
@@ -862,7 +851,7 @@ export default function StaffManagement() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Departments</SelectItem>
-                {departmentOptions.map((dept) => (
+                {DEPARTMENTS.map((dept) => (
                   <SelectItem key={dept} value={dept}>
                     {dept}
                   </SelectItem>

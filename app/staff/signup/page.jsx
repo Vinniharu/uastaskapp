@@ -3,11 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, CheckCircle, Camera, Upload, X, Crop, Check, RotateCcw } from "lucide-react";
+import { AlertCircle, CheckCircle, Upload, X, Check } from "lucide-react";
+import { DEPARTMENTS } from "@/data/department";
 import { useAuth } from "@/lib/auth";
 import { registerStaff } from "@/lib/api";
 import {
@@ -17,12 +17,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
+import ReactCrop, { makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
 export default function StaffSignup() {
   const router = useRouter();
-  const { loginStaff, isStaffLoggedIn } = useAuth();
+  const { isStaffLoggedIn } = useAuth();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -51,17 +51,6 @@ export default function StaffSignup() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
-  // Department list
-  const DEPARTMENTS = [
-    "Electronic Unit",
-    "Production Unit",
-    "Moulding Unit",
-    "GIS",
-    "Payload",
-    "3D & CNC",
-    "Health & Safety",
-    "Pilots",
-  ];
 
   // Redirect already logged in users
   useEffect(() => {
