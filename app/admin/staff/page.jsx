@@ -954,13 +954,13 @@ export default function StaffManagement() {
                         alt={`${staff.firstName} ${staff.lastName}`}
                       />
                       <AvatarFallback>
-                        {staff.firstName?.[0]}
-                        {staff.lastName?.[0]}
+                        {staff.firstName?.[0]?.toUpperCase()}
+                        {staff.lastName?.[0]?.toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-lg">
-                        {staff.firstName} {staff.lastName}
+                      <h3 className="font-semibold text-lg capitalize ">
+                        {staff.firstName?.toLowerCase()} {staff.lastName?.toLowerCase()}
                       </h3>
                       <p className="text-sm text-muted-foreground">
                         {staff.email}

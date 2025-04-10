@@ -48,7 +48,7 @@ import {
   DialogTitle,
   DialogClose
 } from "@/components/ui/dialog";
-import RichTextEditor from "@/app/components/RichTextEditor";
+import { Textarea } from "@/components/ui/textarea";
 
 // Status options for filtering
 const statusOptions = [
@@ -500,6 +500,15 @@ export default function CurrentTasks() {
                           <ArrowUpDown className="h-3 w-3" />
                         </button>
                       </th>
+                      <th className="text-left py-3 px-4 font-medium">
+                        <button 
+                          className="flex items-center gap-1"
+                          onClick={() => toggleSort("description")}
+                        >
+                          Description
+                          <ArrowUpDown className="h-3 w-3" />
+                        </button>
+                      </th>
                       <th className="text-right py-3 px-4 font-medium">Actions</th>
                     </tr>
                   </thead>
@@ -524,6 +533,9 @@ export default function CurrentTasks() {
                         </td>
                         <td className="py-3 px-4">
                           {task.dueDate ? formatDate(task.dueDate) : 'No due date'}
+                        </td>
+                        <td className="py-3 px-4 max-w-[200px] truncate">
+                          {task.description}
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex justify-end gap-2">
@@ -599,10 +611,12 @@ export default function CurrentTasks() {
               <label htmlFor="description" className="text-sm font-medium">
                 Description
               </label>
-              <RichTextEditor
+              <Textarea
+                id="description"
                 value={editingTask?.description || ""}
-                onChange={(value) => handleEditFieldChange("description", value)}
+                onChange={(e) => handleEditFieldChange("description", e.target.value)}
                 placeholder="Enter task description"
+                className="min-h-[100px]"
               />
             </div>
             

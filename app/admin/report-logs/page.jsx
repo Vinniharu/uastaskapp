@@ -5,13 +5,12 @@ import { format } from "date-fns";
 import { AdminLayout } from "@/app/components/AdminLayout";
 import { getReportLogs, createReportLog, updateReportLog, deleteReportLog, exportReportLogsToCSV, uploadReportLogFiles, deleteReportLogFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calendar as CalendarIcon, Download, Filter, Loader2, Search, AlertCircle, PlusCircle, Paperclip, File, DownloadCloud, X, FileText, FileImage, FileArchive, Pencil, Trash2, MoreHorizontal } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -44,9 +43,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DEPARTMENTS } from "@/data/department";
-import dynamic from 'next/dynamic';
-import 'react-quill-new/dist/quill.snow.css';
-import RichTextEditor from "@/app/components/RichTextEditor";
 
 // Fallback date formatter in case date-fns has issues
 const formatDate = (dateString) => {
@@ -976,10 +972,12 @@ export default function ReportLogsPage() {
                     
                     <div className="grid gap-2">
                       <Label htmlFor="description">Description</Label>
-                      <RichTextEditor
+                      <Textarea
+                        id="description"
                         value={newLog.description}
-                        onChange={(value) => setNewLog({ ...newLog, description: value })}
+                        onChange={(e) => setNewLog({ ...newLog, description: e.target.value })}
                         placeholder="Detailed description of the task or activity"
+                        className="min-h-[150px]"
                       />
                     </div>
                     
@@ -1466,10 +1464,12 @@ export default function ReportLogsPage() {
                   
                   <div className="grid gap-2">
                     <Label htmlFor="edit-description">Description</Label>
-                    <RichTextEditor
+                    <Textarea
+                      id="edit-description"
                       value={editLog.description}
-                      onChange={(value) => setEditLog({ ...editLog, description: value })}
+                      onChange={(e) => setEditLog({ ...editLog, description: e.target.value })}
                       placeholder="Detailed description of the task or activity"
+                      className="min-h-[150px]"
                     />
                   </div>
                   
@@ -1851,10 +1851,7 @@ export default function ReportLogsPage() {
                 <div>
                   <Label className="text-muted-foreground">Description</Label>
                   <div className="mt-1 p-3 rounded-md bg-muted">
-                    <div 
-                      className="prose max-w-none"
-                      dangerouslySetInnerHTML={{ __html: selectedLog.description }}
-                    />
+                    <p className="whitespace-pre-wrap">{selectedLog.description || "No description"}</p>
                   </div>
                 </div>
                 

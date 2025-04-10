@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { createTask, getAllStaff } from "@/lib/api";
-import RichTextEditor from "@/app/components/RichTextEditor";
+import { Textarea } from "@/components/ui/textarea";
 
 const priorityLevels = [
   { value: "low", label: "Low", color: "text-green-500" },
@@ -154,10 +154,12 @@ export default function CreateTask() {
                 <label htmlFor="description" className="text-sm font-medium">
                   Description
                 </label>
-                <RichTextEditor
-                  value={formData.description}
-                  onChange={(value) => setFormData({ ...formData, description: value })}
+                <Textarea
+                  id="description"
                   placeholder="Enter task description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  className="min-h-[150px]"
                 />
               </div>
 
