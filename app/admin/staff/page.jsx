@@ -114,6 +114,7 @@ export default function StaffManagement() {
   const [staffToDelete, setStaffToDelete] = useState(null);
   const [selectedStaffImage, setSelectedStaffImage] = useState("");
   const [staffImages, setStaffImages] = useState({});
+  const [validationErrors, setValidationErrors] = useState({});
 
 
   // Check if user is authenticated, redirect to login if not
@@ -302,6 +303,54 @@ export default function StaffManagement() {
     e.preventDefault();
     setIsLoading(true);
     setError("");
+
+    // Validate all required fields
+    const validationErrors = {};
+    let hasErrors = false;
+
+    if (!newStaffData.firstName.trim()) {
+      validationErrors.firstName = "First name is required";
+      hasErrors = true;
+    } else if (newStaffData.firstName.trim().length < 2) {
+      validationErrors.firstName = "First name must be at least 2 characters";
+      hasErrors = true;
+    }
+
+    if (!newStaffData.lastName.trim()) {
+      validationErrors.lastName = "Last name is required";
+      hasErrors = true;
+    } else if (newStaffData.lastName.trim().length < 2) {
+      validationErrors.lastName = "Last name must be at least 2 characters";
+      hasErrors = true;
+    }
+
+    if (!newStaffData.email.trim()) {
+      validationErrors.email = "Email is required";
+      hasErrors = true;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newStaffData.email)) {
+      validationErrors.email = "Please enter a valid email address";
+      hasErrors = true;
+    }
+
+    if (!newStaffData.staffId.trim()) {
+      validationErrors.staffId = "Staff ID is required";
+      hasErrors = true;
+    } else if (newStaffData.staffId.trim().length < 3) {
+      validationErrors.staffId = "Staff ID must be at least 3 characters";
+      hasErrors = true;
+    }
+
+    if (!newStaffData.department) {
+      validationErrors.department = "Department is required";
+      hasErrors = true;
+    }
+
+    if (hasErrors) {
+      setValidationErrors(validationErrors);
+      setError("Please fill in all required fields correctly");
+      setIsLoading(false);
+      return;
+    }
 
     try {
       // First, create the staff member
@@ -723,7 +772,11 @@ export default function StaffManagement() {
                         })
                       }
                       required
+                      className={validationErrors.firstName ? "border-red-500" : ""}
                     />
+                    {validationErrors.firstName && (
+                      <p className="text-sm text-red-500">{validationErrors.firstName}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="lastName">Last Name</Label>
@@ -737,7 +790,11 @@ export default function StaffManagement() {
                         })
                       }
                       required
+                      className={validationErrors.lastName ? "border-red-500" : ""}
                     />
+                    {validationErrors.lastName && (
+                      <p className="text-sm text-red-500">{validationErrors.lastName}</p>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -753,7 +810,11 @@ export default function StaffManagement() {
                       })
                     }
                     required
+                    className={validationErrors.email ? "border-red-500" : ""}
                   />
+                  {validationErrors.email && (
+                    <p className="text-sm text-red-500">{validationErrors.email}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="staffId">Staff ID</Label>
@@ -767,7 +828,11 @@ export default function StaffManagement() {
                       })
                     }
                     required
+                    className={validationErrors.staffId ? "border-red-500" : ""}
                   />
+                  {validationErrors.staffId && (
+                    <p className="text-sm text-red-500">{validationErrors.staffId}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="department">Department</Label>
@@ -780,7 +845,7 @@ export default function StaffManagement() {
                       })
                     }
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className={`w-full ${validationErrors.department ? "border-red-500" : ""}`}>
                       <span>{newStaffData.department || "Select Department"}</span>
                     </SelectTrigger>
                     <SelectContent>
@@ -791,6 +856,9 @@ export default function StaffManagement() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {validationErrors.department && (
+                    <p className="text-sm text-red-500">{validationErrors.department}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phoneNumber">Phone Number</Label>

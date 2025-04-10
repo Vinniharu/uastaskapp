@@ -100,10 +100,16 @@ export default function StaffLogin() {
     if (!formData.email.trim()) {
       setValidationErrors(prev => ({ ...prev, email: "Email or Staff ID is required" }));
       hasErrors = true;
+    } else if (formData.email.trim().length < 3) {
+      setValidationErrors(prev => ({ ...prev, email: "Email or Staff ID must be at least 3 characters" }));
+      hasErrors = true;
     }
 
     if (!formData.password) {
       setValidationErrors(prev => ({ ...prev, password: "Password is required" }));
+      hasErrors = true;
+    } else if (formData.password.length < 6) {
+      setValidationErrors(prev => ({ ...prev, password: "Password must be at least 6 characters" }));
       hasErrors = true;
     }
     
