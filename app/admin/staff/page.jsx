@@ -989,7 +989,7 @@ export default function StaffManagement() {
                           <RefreshCw className="h-4 w-4 mr-2" />
                           Reset Password
                         </DropdownMenuItem>
-                        {/* <DropdownMenuItem
+                        <DropdownMenuItem
                           onClick={() => {
                             setStaffToDelete(staff);
                             setIsDeleteDialogOpen(true);
@@ -998,7 +998,7 @@ export default function StaffManagement() {
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Delete Staff
-                        </DropdownMenuItem> */}
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>

@@ -14,5 +14,6 @@ export const DEPARTMENTS = [
     "Health & Safety Department",
     "Telemetry Unit",
     "Marketing Department",
-    "IT Department"
+    "IT Department",
+    "CNC/3D Department",
   ];
