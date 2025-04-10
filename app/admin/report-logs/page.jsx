@@ -44,6 +44,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DEPARTMENTS } from "@/data/department";
+import dynamic from 'next/dynamic';
+import 'react-quill-new/dist/quill.snow.css';
+import RichTextEditor from "@/app/components/RichTextEditor";
 
 // Fallback date formatter in case date-fns has issues
 const formatDate = (dateString) => {
@@ -158,6 +161,10 @@ export default function ReportLogsPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [logToDelete, setLogToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // View details states
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [selectedLog, setSelectedLog] = useState(null);
 
   // Fetch logs and departments when component mounts
   useEffect(() => {
@@ -540,6 +547,12 @@ export default function ReportLogsPage() {
     setIsDeleteDialogOpen(true);
   };
 
+  // Open view details dialog
+  const openViewDialog = (log) => {
+    setSelectedLog(log);
+    setIsViewDialogOpen(true);
+  };
+
   // Add new log
   const handleAddLog = async (e) => {
     e.preventDefault();
@@ -860,6 +873,13 @@ export default function ReportLogsPage() {
     else return (bytes / 1048576).toFixed(1) + ' MB';
   };
 
+  // Helper function to truncate text
+  const truncateText = (text, maxLength = 100) => {
+    if (!text) return '';
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  };
+
   // Loading state
   if (isLoading) {
     return (
@@ -956,13 +976,10 @@ export default function ReportLogsPage() {
                     
                     <div className="grid gap-2">
                       <Label htmlFor="description">Description</Label>
-                      <Textarea
-                        id="description"
+                      <RichTextEditor
                         value={newLog.description}
-                        onChange={(e) => setNewLog({ ...newLog, description: e.target.value })}
+                        onChange={(value) => setNewLog({ ...newLog, description: value })}
                         placeholder="Detailed description of the task or activity"
-                        required
-                        className="min-h-[100px]"
                       />
                     </div>
                     
@@ -1260,13 +1277,23 @@ export default function ReportLogsPage() {
                           {log.task}
                         </TableCell>
                         <TableCell className="max-w-[350px] whitespace-normal hidden md:table-cell">
-                          {log.description}
+                          <div className="group relative">
+                            <span className="cursor-pointer">{truncateText(log.description)}</span>
+                            <div className="absolute hidden group-hover:block bg-white p-2 rounded-md shadow-lg border z-10 w-[300px]">
+                              {log.description}
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={log.status} />
                         </TableCell>
                         <TableCell className="max-w-[150px] whitespace-normal hidden md:table-cell">
-                          {log.remark}
+                          <div className="group relative">
+                            <span className="cursor-pointer">{truncateText(log.remark, 50)}</span>
+                            <div className="absolute hidden group-hover:block bg-white p-2 rounded-md shadow-lg border z-10 w-[200px]">
+                              {log.remark || 'No remark'}
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
                           {log.files && log.files.length > 0 ? (
@@ -1293,6 +1320,10 @@ export default function ReportLogsPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openViewDialog(log)}>
+                                <FileText className="h-4 w-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => openEditDialog(log)}>
                                 <Pencil className="h-4 w-4 mr-2" />
                                 Edit
@@ -1303,21 +1334,6 @@ export default function ReportLogsPage() {
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Delete
-                              </DropdownMenuItem>
-                              {/* Add view details option for mobile */}
-                              <DropdownMenuItem 
-                                className="md:hidden"
-                                onClick={() => {
-                                  // Open a details dialog that shows the fields hidden on mobile
-                                  alert(`
-Department: ${log.department || "Unassigned"}
-Description: ${log.description}
-Remark: ${log.remark || "None"}
-                                  `);
-                                }}
-                              >
-                                <FileText className="h-4 w-4 mr-2" />
-                                View Details
                               </DropdownMenuItem>
                               {/* Add files view option on mobile */}
                               {log.files && log.files.length > 0 && (
@@ -1450,13 +1466,10 @@ Remark: ${log.remark || "None"}
                   
                   <div className="grid gap-2">
                     <Label htmlFor="edit-description">Description</Label>
-                    <Textarea
-                      id="edit-description"
+                    <RichTextEditor
                       value={editLog.description}
-                      onChange={(e) => setEditLog({ ...editLog, description: e.target.value })}
+                      onChange={(value) => setEditLog({ ...editLog, description: value })}
                       placeholder="Detailed description of the task or activity"
-                      required
-                      className="min-h-[100px]"
                     />
                   </div>
                   
@@ -1796,6 +1809,100 @@ Remark: ${log.remark || "None"}
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* View Details Dialog */}
+        <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+          <DialogContent className="sm:max-w-[600px] w-[95vw] max-w-full">
+            <DialogHeader>
+              <DialogTitle>Report Log Details</DialogTitle>
+              <DialogDescription>
+                Detailed information for task: {selectedLog?.task}
+              </DialogDescription>
+            </DialogHeader>
+            
+            {selectedLog && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-muted-foreground">Date</Label>
+                    <p>{formatDate(selectedLog.date)}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Department</Label>
+                    <p>{selectedLog.department || "Unassigned"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Status</Label>
+                    <div className="mt-1">
+                      <StatusBadge status={selectedLog.status} />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Files</Label>
+                    <p>{selectedLog.files?.length || 0} file{selectedLog.files?.length !== 1 ? 's' : ''}</p>
+                  </div>
+                </div>
+                
+                <div>
+                  <Label className="text-muted-foreground">Task</Label>
+                  <p className="mt-1">{selectedLog.task}</p>
+                </div>
+                
+                <div>
+                  <Label className="text-muted-foreground">Description</Label>
+                  <div className="mt-1 p-3 rounded-md bg-muted">
+                    <div 
+                      className="prose max-w-none"
+                      dangerouslySetInnerHTML={{ __html: selectedLog.description }}
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <Label className="text-muted-foreground">Remark</Label>
+                  <div className="mt-1 p-3 rounded-md bg-muted">
+                    <p className="whitespace-pre-wrap">{selectedLog.remark || "No remark"}</p>
+                  </div>
+                </div>
+                
+                {selectedLog.files && selectedLog.files.length > 0 && (
+                  <div>
+                    <Label className="text-muted-foreground">Attachments</Label>
+                    <div className="mt-2 space-y-2">
+                      {selectedLog.files.map((file, index) => (
+                        <div 
+                          key={index} 
+                          className="flex items-center justify-between p-2 rounded-md border"
+                        >
+                          <div className="flex items-center gap-2">
+                            <FileIcon fileName={file.fileName} />
+                            <span>{file.fileName}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({formatFileSize(file.fileSize)})
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDownloadFile(file.fileUrl, file.fileName, file.id)}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );
@@ -1805,14 +1912,14 @@ Remark: ${log.remark || "None"}
 function StatusBadge({ status }) {
   switch (status?.toLowerCase()) {
     case 'completed':
-      return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Completed</Badge>;
+      return <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-800">Completed</span>;
     case 'in-progress':
-      return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">In Progress</Badge>;
+      return <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">In Progress</span>;
     case 'pending':
-      return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
+      return <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-800">Pending</span>;
     case 'failed':
-      return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Failed</Badge>;
+      return <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">Failed</span>;
     default:
-      return <Badge variant="outline">{status || 'Unknown'}</Badge>;
+      return <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-800">{status || 'Unknown'}</span>;
   }
 } 

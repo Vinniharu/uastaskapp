@@ -48,7 +48,7 @@ import {
   DialogTitle,
   DialogClose
 } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
+import RichTextEditor from "@/app/components/RichTextEditor";
 
 // Status options for filtering
 const statusOptions = [
@@ -599,11 +599,10 @@ export default function CurrentTasks() {
               <label htmlFor="description" className="text-sm font-medium">
                 Description
               </label>
-              <Textarea
-                id="description"
+              <RichTextEditor
                 value={editingTask?.description || ""}
-                onChange={(e) => handleEditFieldChange("description", e.target.value)}
-                className="min-h-[100px]"
+                onChange={(value) => handleEditFieldChange("description", value)}
+                placeholder="Enter task description"
               />
             </div>
             

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { AdminLayout } from "@/app/components/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -28,6 +27,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { createTask, getAllStaff } from "@/lib/api";
+import RichTextEditor from "@/app/components/RichTextEditor";
 
 const priorityLevels = [
   { value: "low", label: "Low", color: "text-green-500" },
@@ -154,13 +154,10 @@ export default function CreateTask() {
                 <label htmlFor="description" className="text-sm font-medium">
                   Description
                 </label>
-                <Textarea
-                  id="description"
-                  placeholder="Enter task description"
+                <RichTextEditor
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  required
-                  className="min-h-[100px]"
+                  onChange={(value) => setFormData({ ...formData, description: value })}
+                  placeholder="Enter task description"
                 />
               </div>
 
