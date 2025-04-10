@@ -33,9 +33,9 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <head>
-        <link rel="icon" href="/mainlogo.jpg" />
-        <link rel="shortcut icon" href="/mainlogo.jpg" />
-        <link rel="apple-touch-icon" href="/mainlogo.jpg" />
+        <link rel="icon" href="/mainlogo.webp" />
+        <link rel="shortcut icon" href="/mainlogo.webp" />
+        <link rel="apple-touch-icon" href="/mainlogo.webp" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
