@@ -3,13 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { AdminLayout } from "@/app/components/AdminLayout";
-import { getReportLogs, createReportLog, updateReportLog, deleteReportLog, exportReportLogsToCSV, uploadReportLogFiles, deleteReportLogFile } from "@/lib/api";
+import { getReportLogs, createReportLog, updateReportLog, deleteReportLog, exportReportLogsToCSV, exportReportLogsToPDF, uploadReportLogFiles, deleteReportLogFile } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Calendar as CalendarIcon, Download, Filter, Loader2, Search, AlertCircle, PlusCircle, Paperclip, File, DownloadCloud, X, FileText, FileImage, FileArchive, Pencil, Trash2, MoreHorizontal } from "lucide-react";
+import { Calendar as CalendarIcon, Download, Filter, Loader2, Search, AlertCircle, PlusCircle, Paperclip, File, DownloadCloud, X, FileText, FileImage, FileArchive, Pencil, Trash2, MoreHorizontal, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -43,6 +43,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DEPARTMENTS } from "@/data/department";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable';
 
 // Fallback date formatter in case date-fns has issues
 const formatDate = (dateString) => {
@@ -118,7 +122,22 @@ export default function ReportLogsPage() {
   
   // Department states - no need for loading state
   const [departments] = useState(DEPARTMENTS);
+
+  // Properly parse staffInfo from sessionStorage
+  const [user, setUser] = useState(null);
   
+  useEffect(() => {
+    try {
+      const staffInfoString = sessionStorage.getItem('staffInfo');
+      if (staffInfoString) {
+        const staffInfo = JSON.parse(staffInfoString);
+        setUser(staffInfo);
+      }
+    } catch (error) {
+      console.error("Error parsing user info from sessionStorage:", error);
+    }
+  }, []);
+
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -126,6 +145,22 @@ export default function ReportLogsPage() {
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
+
+  // Export states
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [exportType, setExportType] = useState('pdf');
+  const [selectedFields, setSelectedFields] = useState({
+    date: true,
+    department: true,
+    task: true,
+    description: true,
+    status: true,
+    remark: true,
+    filesCount: false
+  });
+  const [exporterName, setExporterName] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
 
   // File viewing states
   const [isFileDialogOpen, setIsFileDialogOpen] = useState(false);
@@ -206,31 +241,19 @@ export default function ReportLogsPage() {
         params.search = searchTerm;
       }
       
-      // Log the request parameters for debugging
-      console.log("Fetching logs with params:", params);
-      
       try {
         const response = await getReportLogs(params);
-        
-        // Log the actual response for debugging
-        console.log("API Response type:", typeof response);
-        console.log("API Response:", response);
         
         // Super robust handling of any response format
         let logsData = [];
         
         if (Array.isArray(response)) {
-          // Direct array response
-          console.log("Processing array response");
           logsData = response;
         } else if (response && typeof response === 'object') {
           if (Array.isArray(response.logs)) {
-            // Object with logs array
-            console.log("Processing object with logs array");
             logsData = response.logs;
           } else {
             // Try to convert object to array if possible
-            console.log("Attempting to convert object to array");
             const possibleArray = Object.values(response).find(val => Array.isArray(val));
             if (possibleArray) {
               logsData = possibleArray;
@@ -248,7 +271,6 @@ export default function ReportLogsPage() {
         }
         
         // At this point logsData should be an array
-        console.log("Extracted logs data:", logsData);
         setLogs(logsData);
         setFilteredLogs(logsData);
         
@@ -360,6 +382,374 @@ export default function ReportLogsPage() {
     }
   };
 
+  
+
+  // Export report logs to PDF
+  const exportToPDF = async () => {
+    setIsExporting(true);
+    setError(""); // Clear any previous errors
+    
+    try {
+      // Show initial progress
+      setSuccess("Starting PDF generation: 0%");
+      setExportProgress(0);
+      
+      // Prepare filter parameters for client-side filtering
+      const filterParams = {};
+      
+      if (startDate) {
+        filterParams.startDate = startDate;
+      }
+      
+      if (endDate) {
+        filterParams.endDate = endDate;
+      }
+      
+      if (statusFilter !== "all") {
+        filterParams.status = statusFilter;
+      }
+      
+      if (departmentFilter !== "all") {
+        filterParams.department = departmentFilter;
+      }
+      
+      if (searchTerm) {
+        filterParams.search = searchTerm;
+      }
+      
+      // Use the logs we already have and filter them locally instead of calling the API
+      setSuccess("Filtering logs: 15%");
+      setExportProgress(15);
+      
+      // Filter logs client-side
+      let filteredData = [...logs];
+      
+      // Apply date filters
+      if (filterParams.startDate) {
+        filteredData = filteredData.filter(log => 
+          new Date(log.date) >= filterParams.startDate
+        );
+      }
+      
+      if (filterParams.endDate) {
+        filteredData = filteredData.filter(log => 
+          new Date(log.date) <= filterParams.endDate
+        );
+      }
+      
+      // Apply status filter
+      if (filterParams.status) {
+        filteredData = filteredData.filter(log => 
+          log.status === filterParams.status
+        );
+      }
+      
+      // Apply department filter
+      if (filterParams.department) {
+        filteredData = filteredData.filter(log => 
+          log.department === filterParams.department
+        );
+      }
+      
+      // Apply search filter
+      if (filterParams.search) {
+        const term = filterParams.search.toLowerCase();
+        filteredData = filteredData.filter(log => 
+          (log.task && log.task.toLowerCase().includes(term)) ||
+          (log.description && log.description.toLowerCase().includes(term)) ||
+          (log.remark && log.remark.toLowerCase().includes(term))
+        );
+      }
+      
+      // Check if we have any logs after filtering
+      if (filteredData.length === 0) {
+        throw new Error("No logs found matching the selected filters");
+      }
+      
+      setSuccess("Creating PDF document: 30%");
+      setExportProgress(30);
+      
+      // Prepare the document and add headers
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // Get user's full name from parsed staffInfo
+      const userName = user ? `${user.fullName || ''}`.trim() : '';
+      
+      // Set document properties
+      doc.setProperties({
+        title: 'Briech UAS Report Logs',
+        subject: 'Report Logs Export',
+        author: exporterName || userName || 'Admin User',
+        creator: 'Briech UAS Task Management System'
+      });
+      
+      // Get page dimensions
+      const pageWidth = doc.internal.pageSize.getWidth();
+      
+      setSuccess("Building PDF header: 40%");
+      setExportProgress(40);
+      
+      // Add company logo
+      try {
+        const logoUrl = '/logomain.png'; // Path to the company logo
+        const logoWidth = 20; // Width of the logo in mm
+        
+        // Position the logo in the top left area
+        const logoX = 15;
+        const logoY = 15;
+        
+        // Use an image element to load the logo
+        const img = new Image();
+        img.src = logoUrl;
+        
+        // Wait for the image to load before adding it to the PDF
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = () => {
+            console.error("Failed to load logo image");
+            resolve(); // Continue even if logo fails to load
+          };
+        });
+        
+        // Add the logo to the PDF
+        doc.addImage(img, 'JPEG', logoX, logoY, logoWidth, logoWidth * (img.height / img.width));
+      } catch (logoError) {
+        console.error("Error adding logo to PDF:", logoError);
+        // Continue with PDF generation even if logo fails
+      }
+      
+      // Add header - "Briech UAS Report Logs" - positioned to the right of logo
+      doc.setFontSize(20);
+      doc.setTextColor(0, 51, 102); // Dark blue
+      doc.setFont('helvetica', 'bold');
+      doc.text('Briech UAS Report Logs', pageWidth / 2 + 20, 25, { align: 'center' });
+      
+      // Add subtitle with date - also adjusted position
+      doc.setFontSize(12);
+      doc.setTextColor(100, 100, 100); // Gray
+      doc.setFont('helvetica', 'normal');
+      // Use the user's name from parsed staffInfo
+      doc.text(`Generated on: ${new Date().toLocaleDateString()} by ${userName}`, pageWidth / 2 + 20, 33, { align: 'center' });
+      
+      setSuccess("Adding filter information: 50%");
+      setExportProgress(50);
+      
+      // Add filter information
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0); // Black
+      doc.setFont('helvetica', 'normal');
+      
+      let filterY = 45; // Increased Y position to avoid overlapping with logo
+      const lineHeight = 5;
+      
+      if (filterParams.startDate && filterParams.endDate) {
+        const formattedStartDate = new Date(filterParams.startDate).toLocaleDateString();
+        const formattedEndDate = new Date(filterParams.endDate).toLocaleDateString();
+        doc.text(`Date Range: ${formattedStartDate} to ${formattedEndDate}`, 15, filterY);
+        filterY += lineHeight;
+      }
+      
+      if (filterParams.search) {
+        doc.text(`Search: "${filterParams.search}"`, 15, filterY);
+        filterY += lineHeight;
+      }
+      
+      if (filterParams.department) {
+        doc.text(`Department: ${filterParams.department}`, 15, filterY);
+        filterY += lineHeight;
+      }
+      
+      if (filterParams.status) {
+        doc.text(`Status: ${filterParams.status}`, 15, filterY);
+        filterY += lineHeight;
+      }
+      
+      setSuccess("Preparing table data: 60%");
+      setExportProgress(60);
+      
+      // Prepare table headers and columns based on selected fields
+      const headers = [];
+      const columns = [];
+      
+      if (selectedFields.date) {
+        headers.push('Date');
+        columns.push('date');
+      }
+      
+      if (selectedFields.department) {
+        headers.push('Department');
+        columns.push('department');
+      }
+      
+      if (selectedFields.task) {
+        headers.push('Task');
+        columns.push('task');
+      }
+      
+      if (selectedFields.description) {
+        headers.push('Description');
+        columns.push('description');
+      }
+      
+      if (selectedFields.status) {
+        headers.push('Status');
+        columns.push('status');
+      }
+      
+      if (selectedFields.remark) {
+        headers.push('Remark');
+        columns.push('remark');
+      }
+      
+      if (selectedFields.filesCount) {
+        headers.push('Files');
+        columns.push('filesCount');
+      }
+      
+      // Prepare table data
+      const tableData = filteredData.map(log => {
+        const row = [];
+        
+        columns.forEach(col => {
+          let value = '';
+          
+          if (col === 'date') {
+            value = formatDate(log.date);
+          } else if (col === 'filesCount') {
+            value = log.files ? log.files.length.toString() : '0';
+          } else if (col === 'status') {
+            // Format status with proper capitalization
+            const status = log.status || '';
+            value = status.charAt(0).toUpperCase() + status.slice(1).replace(/-/g, ' ');
+          } else {
+            value = log[col] || '';
+          }
+          
+          // No truncation for PDF export - use full text for all fields
+          row.push(value);
+        });
+        
+        return row;
+      });
+      
+      setSuccess("Generating table layout: 75%");
+      setExportProgress(75);
+      
+      // Calculate column widths based on content and headers
+      let columnWidths = {};
+      
+      // Configure widths for specific columns
+      if (selectedFields.date) {
+        columnWidths[headers.indexOf('Date')] = 20;
+      }
+      
+      if (selectedFields.department) {
+        columnWidths[headers.indexOf('Department')] = 25;
+      }
+      
+      if (selectedFields.task) {
+        columnWidths[headers.indexOf('Task')] = 35;
+      }
+      
+      if (selectedFields.status) {
+        columnWidths[headers.indexOf('Status')] = 20;
+      }
+      
+      if (selectedFields.filesCount) {
+        columnWidths[headers.indexOf('Files')] = 10;
+      }
+      
+      setSuccess("Creating table in PDF: 85%");
+      setExportProgress(85);
+      
+      // Add the table using the autoTable plugin
+      autoTable(doc, {
+        head: [headers],
+        body: tableData,
+        startY: 40,
+        styles: {
+          fontSize: 9,
+          cellPadding: 3,
+          overflow: 'linebreak',
+          lineWidth: 0.1,
+          halign: 'left',
+          valign: 'middle'
+        },
+        headStyles: {
+          fillColor: [0, 71, 171],
+          textColor: 255,
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 250]
+        },
+        // Set column widths
+        columnStyles: columnWidths,
+        // Handle long text properly
+        rowPageBreak: 'auto',
+        bodyStyles: {
+          minCellHeight: 15
+        },
+        // Set specific styles for description and remark columns
+        willDrawCell: function(data) {
+          if (data.column.dataKey === headers.indexOf('Description') || 
+              data.column.dataKey === headers.indexOf('Remark')) {
+            data.cell.styles.cellWidth = 'wrap';
+            data.cell.styles.minCellHeight = 20;
+          }
+        },
+        // Additional options
+        didDrawPage: function(data) {
+          // Add footer on each page
+          let str = `Page ${data.pageNumber} of ${data.pageCount} | Briech UAS Task Management System`;
+          let footerX = data.settings.margin.left;
+          let footerY = doc.internal.pageSize.getHeight() - 10;
+          
+          doc.setFontSize(8);
+          doc.setTextColor(100, 100, 100);
+          doc.text(str, pageWidth / 2, footerY, { align: 'center' });
+        }
+      });
+      
+      setSuccess("Finalizing PDF: 95%");
+      setExportProgress(95);
+      
+      // Save and download the PDF with company name and date
+      const currentDate = new Date().toISOString().split('T')[0];
+      const fileName = `Briech_UAS_Report_Logs_${currentDate}.pdf`;
+      doc.save(fileName);
+      
+      // Close export dialog
+      setIsExportDialogOpen(false);
+      
+      // Success message
+      setSuccess(`PDF export completed successfully: ${fileName}`);
+      setExportProgress(100);
+    } catch (err) {
+      console.error("Error exporting PDF:", err);
+      setError(err.message || "Failed to export PDF. Please try again later.");
+      setExportProgress(0);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+  
+  // Function to handle export based on selected type
+  const handleExport = async () => {
+    if (exportType === 'csv') {
+      await exportToCSV();
+    } else {
+      await exportToPDF();
+    }
+    
+    // We don't need to close the dialog here as it's handled in the exportToPDF/exportToCSV functions
+  };
+
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
       const filesArray = Array.from(e.target.files);
@@ -406,23 +796,25 @@ export default function ReportLogsPage() {
     }));
   };
 
-  // Handle file deletion from the file viewer
-  const handleFileViewerDelete = async (fileId, fileName) => {
+  // Handle file deletion from any source
+  const handleFileDelete = async (fileId, fileName, sourceContext = 'general') => {
     setError(""); // Clear previous errors
     setSuccess(""); // Clear previous success messages
     
     try {
-      console.log(`Deleting file ${fileId} (${fileName}) from file viewer`);
-      
-      // Call the API to delete the file
       await deleteReportLogFile(fileId);
       
-      // Update the UI after successful deletion
+      // Update UI based on where deletion was triggered from
+      if (sourceContext === 'fileViewer') {
+        setSelectedFiles(prev => prev.filter(file => file.id !== fileId));
+      } else if (sourceContext === 'editor') {
+        setEditLog(prev => ({
+          ...prev,
+          files: prev.files.filter(file => file.id !== fileId)
+        }));
+      }
       
-      // 1. Update the selected files list
-      setSelectedFiles(prev => prev.filter(file => file.id !== fileId));
-      
-      // 2. Update the logs data to reflect the deletion
+      // Update the logs data to reflect the deletion regardless of source
       setLogs(prevLogs => 
         prevLogs.map(log => {
           if (log.files && Array.isArray(log.files)) {
@@ -435,9 +827,7 @@ export default function ReportLogsPage() {
         })
       );
       
-      // Show success message
       setSuccess(`File "${fileName}" was successfully deleted.`);
-      
       return true;
     } catch (error) {
       console.error(`Error deleting file ${fileId}:`, error);
@@ -446,31 +836,104 @@ export default function ReportLogsPage() {
     }
   };
 
-  // Handle immediate file deletion
-  const handleDeleteFile = async (fileId, fileName) => {
-    setError(""); // Clear previous errors
-    setSuccess(""); // Clear previous success messages
+  // Handle file downloads
+  const handleDownloadFile = async (fileUrl, fileName, fileId) => {
+    if (!fileId && !fileUrl) {
+      setError("File information is missing. Cannot download the file.");
+      return false;
+    }
     
     try {
-      console.log(`Deleting file ${fileId} (${fileName}) using endpoint: /reports/logs/files/${fileId}`);
+      setSuccess(`Downloading file: ${fileName}...`);
       
-      // Call the API to delete the file
-      await deleteReportLogFile(fileId);
+      // Prioritize file ID for direct downloads
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+      let downloadUrl = fileId 
+        ? `${API_BASE_URL}/reports/logs/files/${fileId}`
+        : fileUrl.startsWith('/') 
+          ? `${API_BASE_URL.replace(/\/$/, '')}${fileUrl.startsWith('/api/') ? fileUrl.substring(4) : fileUrl}`
+          : fileUrl;
       
-      // Update the UI after successful deletion
-      setEditLog(prev => ({
-        ...prev,
-        files: prev.files.filter(file => file.id !== fileId)
-      }));
+      // Prepare authentication headers
+      const headers = {};
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
       
-      // Show success message
-      setSuccess(`File "${fileName}" was successfully deleted.`);
+      const response = await fetch(downloadUrl, {
+        method: 'GET',
+        headers: headers,
+      });
       
+      if (!response.ok) {
+        throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
+      }
+      
+      // Get the filename from the Content-Disposition header if available
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let downloadFileName = fileName;
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+?)"/);
+        if (filenameMatch && filenameMatch[1]) {
+          downloadFileName = filenameMatch[1];
+        }
+      }
+      
+      // Create a blob and trigger download
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = downloadFileName;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
+      
+      setSuccess(`Successfully downloaded: ${downloadFileName}`);
       return true;
-    } catch (error) {
-      console.error(`Error deleting file ${fileId}:`, error);
-      setError(`Failed to delete file: ${error.message || "Unknown error"}`);
+    } catch (err) {
+      console.error("Error downloading file:", err);
+      setError(`Failed to download file: ${err.message || "Unknown error"}`);
       return false;
+    }
+  };
+
+  // Helper for downloading multiple files
+  const handleBulkDownload = async (files) => {
+    if (!files || files.length === 0) return;
+    
+    setSuccess(`Starting download of ${files.length} files...`);
+    
+    // Track success and failure counts
+    let successCount = 0;
+    let failureCount = 0;
+    
+    // Process files sequentially for better reliability
+    for (const file of files) {
+      try {
+        const result = await handleDownloadFile(file.fileUrl, file.fileName, file.id);
+        if (result) {
+          successCount++;
+        } else {
+          failureCount++;
+        }
+      } catch (error) {
+        console.error(`Error downloading file ${file.fileName}:`, error);
+        failureCount++;
+      }
+    }
+    
+    // Show final results
+    if (failureCount === 0) {
+      setSuccess(`Successfully downloaded all ${successCount} file${successCount !== 1 ? 's' : ''}.`);
+    } else {
+      setError(`Downloaded ${successCount} file${successCount !== 1 ? 's' : ''}, but ${failureCount} file${failureCount !== 1 ? 's' : ''} failed to download.`);
     }
   };
 
@@ -481,23 +944,16 @@ export default function ReportLogsPage() {
       return [];
     }
     
-    console.log(`Preparing to upload ${files.length} files for log ID: ${logId}`);
-    
     const formData = new FormData();
     
     // Append each file to the FormData using the standardized "files" field name
     files.forEach(file => {
       formData.append('files', file);
-      console.log(`Added file to FormData: ${file.name} (${formatFileSize(file.size)})`);
     });
-    
-    console.log(`Sending files to endpoint: /reports/logs/files?logId=${logId}`);
     
     try {
       // Call the API to upload the files
       const result = await uploadReportLogFiles(logId, formData);
-      
-      console.log(`File upload successful for log ${logId}:`, result);
       
       if (!result.files || !Array.isArray(result.files) || result.files.length === 0) {
         console.warn(`Server responded with success but no files were returned for log ${logId}`);
@@ -510,7 +966,6 @@ export default function ReportLogsPage() {
       
       // Enhanced error message with more context
       const errorMessage = error.data?.message || error.message || "Unknown upload error";
-      console.error(`Upload error details: ${errorMessage}`);
       
       // Rethrow with improved error message
       const enhancedError = new Error(`Failed to upload files: ${errorMessage}`);
@@ -777,91 +1232,6 @@ export default function ReportLogsPage() {
     }
   };
 
-  const handleDownloadFile = async (fileUrl, fileName, fileId) => {
-    // If we have a fileId, prioritize that for direct download (new approach)
-    if (!fileId && !fileUrl) {
-      console.error("No file ID or URL provided");
-      setError("File information is missing. Cannot download the file.");
-      return false;
-    }
-    
-    try {
-      // Set a temporary loading message
-      setSuccess(`Downloading file: ${fileName}...`);
-      
-      let downloadUrl;
-      
-      if (fileId) {
-        // Use the direct file endpoint with the file ID
-        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-        downloadUrl = `${API_BASE_URL}/reports/logs/files/${fileId}`;
-        console.log(`Downloading file using direct endpoint: ${downloadUrl}`);
-      } else {
-        // Fall back to the old URL method if file ID is not available
-        downloadUrl = fileUrl;
-        if (fileUrl.startsWith('/')) {
-          const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-          const pathWithoutApi = fileUrl.startsWith('/api/') ? fileUrl.substring(4) : fileUrl;
-          downloadUrl = `${API_BASE_URL.replace(/\/$/, '')}${pathWithoutApi}`;
-        }
-        console.log(`Downloading file using URL method: ${downloadUrl}`);
-      }
-      
-      // Prepare authentication headers
-      const headers = {};
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-      
-      // Using fetch to create a proper request with auth headers
-      const response = await fetch(downloadUrl, {
-        method: 'GET',
-        headers: headers,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
-      }
-      
-      // Get the filename from the Content-Disposition header if available
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let downloadFileName = fileName;
-      
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="(.+?)"/);
-        if (filenameMatch && filenameMatch[1]) {
-          downloadFileName = filenameMatch[1];
-        }
-      }
-      
-      // Create a blob from the response
-      const blob = await response.blob();
-      
-      // Create a download link
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = downloadFileName;
-      
-      // Trigger download
-      document.body.appendChild(link);
-      link.click();
-      
-      // Clean up
-      setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      }, 100);
-      
-      setSuccess(`Successfully downloaded: ${downloadFileName}`);
-      return true;
-    } catch (err) {
-      console.error("Error downloading file:", err);
-      setError(`Failed to download file: ${err.message || "Unknown error"}`);
-      return false;
-    }
-  };
-
   // Helper to format file size
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return bytes + ' bytes';
@@ -887,6 +1257,252 @@ export default function ReportLogsPage() {
       </AdminLayout>
     );
   }
+
+  // Export Dialog (Modal)
+  const ExportDialog = () => {
+    // Use a ref to close dialog
+    const closeDialogRef = useRef(null);
+
+    // Use effect to set user name when dialog opens
+    useEffect(() => {
+      if (isExportDialogOpen && user) {
+        const fullName = user.fullName || '';
+        if (fullName) {
+          setExporterName(fullName);
+        }
+      }
+    }, [isExportDialogOpen, user]);
+
+    // Function to close the dialog
+    const closeDialog = () => {
+      setIsExportDialogOpen(false);
+      setSelectedFields({
+        date: true,
+        department: true,
+        task: true,
+        description: true,
+        status: true,
+        remark: true,
+        filesCount: false
+      });
+    };
+
+    return (
+      <Dialog open={isExportDialogOpen} onOpenChange={closeDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Export Report Logs</DialogTitle>
+            <DialogDescription>
+              Export your report logs to your preferred format.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 py-4">
+            <Tabs defaultValue="pdf" className="w-full" value={exportType} onValueChange={setExportType}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="pdf">
+                  <FileText className="mr-2 h-4 w-4" /> PDF
+                </TabsTrigger>
+                <TabsTrigger value="csv">
+                  <FileText className="mr-2 h-4 w-4" /> CSV
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="pdf" className="space-y-4 mt-3">
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="exporterName">Your Name</Label>
+                    <Input
+                      id="exporterName"
+                      value={exporterName}
+                      onChange={(e) => setExporterName(e.target.value)}
+                      placeholder="Enter your name"
+                      className="w-full"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Select Fields to Include</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="date" 
+                          checked={selectedFields.date} 
+                          onCheckedChange={(checked) => 
+                            setSelectedFields({...selectedFields, date: !!checked})
+                          }
+                        />
+                        <Label htmlFor="date" className="cursor-pointer">Date</Label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="department" 
+                          checked={selectedFields.department} 
+                          onCheckedChange={(checked) => 
+                            setSelectedFields({...selectedFields, department: !!checked})
+                          }
+                        />
+                        <Label htmlFor="department" className="cursor-pointer">Department</Label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="task" 
+                          checked={selectedFields.task} 
+                          onCheckedChange={(checked) => 
+                            setSelectedFields({...selectedFields, task: !!checked})
+                          }
+                        />
+                        <Label htmlFor="task" className="cursor-pointer">Task</Label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="description" 
+                          checked={selectedFields.description} 
+                          onCheckedChange={(checked) => 
+                            setSelectedFields({...selectedFields, description: !!checked})
+                          }
+                        />
+                        <Label htmlFor="description" className="cursor-pointer">Description</Label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="status" 
+                          checked={selectedFields.status} 
+                          onCheckedChange={(checked) => 
+                            setSelectedFields({...selectedFields, status: !!checked})
+                          }
+                        />
+                        <Label htmlFor="status" className="cursor-pointer">Status</Label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="remark" 
+                          checked={selectedFields.remark} 
+                          onCheckedChange={(checked) => 
+                            setSelectedFields({...selectedFields, remark: !!checked})
+                          }
+                        />
+                        <Label htmlFor="remark" className="cursor-pointer">Remark</Label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2">
+                        <Checkbox 
+                          id="filesCount" 
+                          checked={selectedFields.filesCount} 
+                          onCheckedChange={(checked) => 
+                            setSelectedFields({...selectedFields, filesCount: !!checked})
+                          }
+                        />
+                        <Label htmlFor="filesCount" className="cursor-pointer">Files Count</Label>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Applied Filters</Label>
+                    <div className="text-sm text-gray-500 border rounded p-3 bg-gray-50">
+                      {departmentFilter !== 'all' && (
+                        <div><span className="font-medium">Department:</span> {departmentFilter}</div>
+                      )}
+                      {statusFilter !== 'all' && (
+                        <div><span className="font-medium">Status:</span> {statusFilter}</div>
+                      )}
+                      {(startDate || endDate) && (
+                        <div>
+                          <span className="font-medium">Date Range:</span> 
+                          {startDate ? formatDate(startDate) : 'Any'} to {endDate ? formatDate(endDate) : 'Any'}
+                        </div>
+                      )}
+                      {searchTerm && (
+                        <div><span className="font-medium">Search:</span> "{searchTerm}"</div>
+                      )}
+                      {departmentFilter === 'all' && statusFilter === 'all' && !startDate && !endDate && !searchTerm && (
+                        <div>No filters applied</div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {isExporting && (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Label className="text-sm">Export Progress</Label>
+                        <span className="text-sm text-gray-500">{exportProgress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div 
+                          className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                          style={{ width: `${exportProgress}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+                  
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="csv" className="space-y-4 mt-3">
+                <div className="space-y-2">
+                  <Label>Applied Filters</Label>
+                  <div className="text-sm text-gray-500 border rounded p-3 bg-gray-50">
+                    {departmentFilter !== 'all' && (
+                      <div><span className="font-medium">Department:</span> {departmentFilter}</div>
+                    )}
+                    {statusFilter !== 'all' && (
+                      <div><span className="font-medium">Status:</span> {statusFilter}</div>
+                    )}
+                    {(startDate || endDate) && (
+                      <div>
+                        <span className="font-medium">Date Range:</span> 
+                        {startDate ? formatDate(startDate) : 'Any'} to {endDate ? formatDate(endDate) : 'Any'}
+                      </div>
+                    )}
+                    {searchTerm && (
+                      <div><span className="font-medium">Search:</span> "{searchTerm}"</div>
+                    )}
+                    {departmentFilter === 'all' && statusFilter === 'all' && !startDate && !endDate && !searchTerm && (
+                      <div>No filters applied</div>
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          <DialogFooter className="flex justify-between sm:justify-between">
+            <Button variant="ghost" onClick={closeDialog} type="button" ref={closeDialogRef}>
+              Cancel
+            </Button>
+            <div className="flex gap-2">
+              {exportType === 'pdf' ? (
+                <Button 
+                  type="button" 
+                  onClick={exportToPDF} 
+                  disabled={isExporting}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {isExporting ? "Exporting..." : "Export to PDF"}
+                </Button>
+              ) : (
+                <Button 
+                  type="button" 
+                  onClick={exportToCSV} 
+                  disabled={isExporting}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {isExporting ? "Exporting..." : "Export to CSV"}
+                </Button>
+              )}
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  };
 
   return (
     <AdminLayout>
@@ -1094,15 +1710,19 @@ export default function ReportLogsPage() {
               </DialogContent>
             </Dialog>
             
+            {/* Export Button */}
             <Button 
               variant="outline" 
-              onClick={exportToCSV}
               disabled={filteredLogs.length === 0}
               className="flex items-center gap-2"
+              onClick={() => setIsExportDialogOpen(true)}
             >
               <Download className="h-4 w-4" />
-              Export to CSV
+              Export
             </Button>
+            
+            {/* Render the Export Dialog */}
+            <ExportDialog />
           </div>
         </div>
 
@@ -1347,35 +1967,7 @@ export default function ReportLogsPage() {
                                     onClick={async () => {
                                       // Download all files for this log
                                       if (!log.files || log.files.length === 0) return;
-                                      
-                                      setSuccess(`Starting download of ${log.files.length} files...`);
-                                      
-                                      // Track success and failure counts
-                                      let successCount = 0;
-                                      let failureCount = 0;
-                                      
-                                      // Process files one at a time
-                                      for (const file of log.files) {
-                                        try {
-                                          // Using await to process files sequentially
-                                          const result = await handleDownloadFile(file.fileUrl, file.fileName, file.id);
-                                          if (result) {
-                                            successCount++;
-                                          } else {
-                                            failureCount++;
-                                          }
-                                        } catch (error) {
-                                          console.error(`Error downloading file ${file.fileName}:`, error);
-                                          failureCount++;
-                                        }
-                                      }
-                                      
-                                      // Show final results
-                                      if (failureCount === 0) {
-                                        setSuccess(`Successfully downloaded all ${successCount} file${successCount !== 1 ? 's' : ''}.`);
-                                      } else {
-                                        setError(`Downloaded ${successCount} file${successCount !== 1 ? 's' : ''}, but ${failureCount} file${failureCount !== 1 ? 's' : ''} failed to download.`);
-                                      }
+                                      handleBulkDownload(log.files);
                                     }}
                                   >
                                     <DownloadCloud className="h-4 w-4 mr-2" />
@@ -1536,7 +2128,7 @@ export default function ReportLogsPage() {
                                     Mark for Deletion
                                   </DropdownMenuItem>
                                   <DropdownMenuItem 
-                                    onClick={() => handleDeleteFile(file.id, file.fileName)}
+                                    onClick={() => handleFileDelete(file.id, file.fileName, 'editor')}
                                     className="text-red-600"
                                   >
                                     <Trash2 className="h-4 w-4 mr-2" />
@@ -1752,7 +2344,7 @@ export default function ReportLogsPage() {
                           size="icon"
                           title="Delete file"
                           className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => handleFileViewerDelete(file.id, file.fileName)}
+                          onClick={() => handleFileDelete(file.id, file.fileName, 'fileViewer')}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -1771,37 +2363,7 @@ export default function ReportLogsPage() {
               </Button>
               {selectedFiles.length > 0 && (
                 <Button 
-                  onClick={async () => {
-                    // Download all files sequentially for better reliability
-                    setSuccess(`Starting download of ${selectedFiles.length} files...`);
-                    
-                    // Track success and failure counts
-                    let successCount = 0;
-                    let failureCount = 0;
-                    
-                    // Process files one at a time
-                    for (const file of selectedFiles) {
-                      try {
-                        // Using await to process files sequentially
-                        const result = await handleDownloadFile(file.fileUrl, file.fileName, file.id);
-                        if (result) {
-                          successCount++;
-                        } else {
-                          failureCount++;
-                        }
-                      } catch (error) {
-                        console.error(`Error downloading file ${file.fileName}:`, error);
-                        failureCount++;
-                      }
-                    }
-                    
-                    // Show final results
-                    if (failureCount === 0) {
-                      setSuccess(`Successfully downloaded all ${successCount} file${successCount !== 1 ? 's' : ''}.`);
-                    } else {
-                      setError(`Downloaded ${successCount} file${successCount !== 1 ? 's' : ''}, but ${failureCount} file${failureCount !== 1 ? 's' : ''} failed to download.`);
-                    }
-                  }}
+                  onClick={() => handleBulkDownload(selectedFiles)}
                 >
                   Download All ({selectedFiles.length})
                 </Button>
