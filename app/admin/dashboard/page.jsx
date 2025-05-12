@@ -138,7 +138,7 @@ export default function AdminDashboard() {
         )}
 
         {/* Task Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           <Card className="bg-white shadow">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-gray-500">Total Tasks</CardTitle>
@@ -183,6 +183,18 @@ export default function AdminDashboard() {
               <div className="flex items-center">
                 <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
                 <span className="text-3xl font-bold">{stats?.completed || 0}</span>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-white shadow">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-500">Total Staff</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center">
+                <Users className="h-5 w-5 text-purple-500 mr-2" />
+                <span className="text-3xl font-bold">{stats?.staffCount || 0}</span>
               </div>
             </CardContent>
           </Card>
