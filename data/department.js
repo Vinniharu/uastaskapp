@@ -17,5 +17,6 @@ export const DEPARTMENTS = [
     "IT Department",
     "CNC/3D Department",
     "Internal Control",
-    "NOC"
+    "NOC",
+    "Armament"
   ];
